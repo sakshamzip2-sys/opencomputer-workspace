@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   Moon,
+  Palette,
   PanelLeftClose,
   PanelLeftOpen,
   Puzzle,
@@ -25,6 +26,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
 import { CHAT_OPEN_SETTINGS_EVENT } from '../chat-events'
 import { useChatSettings as useSidebarSettings } from '../hooks/use-chat-settings'
 import { useDeleteSession } from '../hooks/use-delete-session'
@@ -63,6 +65,57 @@ import {
 import { applyTheme, useSettingsStore } from '@/hooks/use-settings'
 
 type WorkspaceStats = Record<string, unknown>
+
+// ── Footer subtitle data ───────────────────────────────────────────────
+// Replaces a hardcoded "Pro plan" string. Pulls the active model + chat
+// mode from /api/connection-status (the endpoint the app already polls
+// for startup health). Falls back to the active theme when the backend
+// is unreachable so the chip never shows a misleading value.
+
+type ConnectionStatusPayload = {
+  activeModel?: unknown
+  chatMode?: unknown
+  status?: unknown
+}
+
+async function fetchFooterSubtitle(): Promise<string | null> {
+  const controller = new AbortController()
+  const timeoutId = globalThis.setTimeout(() => controller.abort(), 4000)
+  try {
+    const response = await fetch('/api/connection-status', {
+      signal: controller.signal,
+      cache: 'no-store',
+    })
+    if (!response.ok) {
+      // Don't log at warn for expected 503 (gateway down) — that's a
+      // normal offline state, not an error worth user attention.
+      if (response.status !== 503) {
+        console.warn(
+          `[sidebar-footer] connection-status returned ${response.status}`,
+        )
+      }
+      return null
+    }
+    const body = (await response.json()) as ConnectionStatusPayload
+    const model =
+      typeof body.activeModel === 'string' && body.activeModel.trim()
+        ? body.activeModel.trim()
+        : null
+    if (!model) return null
+    // Strip any provider prefix like "anthropic/" for compact display.
+    const display = model.includes('/') ? model.split('/').pop() || model : model
+    return display
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      console.debug('[sidebar-footer] connection-status timed out')
+      return null
+    }
+    console.warn('[sidebar-footer] connection-status failed:', error)
+    return null
+  } finally {
+    globalThis.clearTimeout(timeoutId)
+  }
+}
 
 function ThemeToggleMini() {
   const _theme = useSettingsStore((state) => state.settings.theme)
@@ -234,7 +287,6 @@ function NavItem({
               render={
                 <Link
                   to={item.to}
-                  search={item.search}
                   hash={item.hash}
                   onClick={handleSelect}
                   className={cls}
@@ -252,7 +304,6 @@ function NavItem({
     return (
       <Link
         to={item.to}
-        search={item.search}
         hash={item.hash}
         onClick={handleSelect}
         className={cls}
@@ -514,6 +565,14 @@ function ChatSidebarComponent({
   const profileAvatarDataUrl = useChatSettingsStore(
     selectChatProfileAvatarDataUrl,
   )
+  const footerSubtitleQuery = useQuery({
+    queryKey: ['sidebar-footer-subtitle'],
+    queryFn: fetchFooterSubtitle,
+    refetchInterval: 60_000,
+    retry: false,
+    staleTime: 30_000,
+  })
+  const footerSubtitle = footerSubtitleQuery.data || 'Offline'
   const { deleteSession } = useDeleteSession()
   const { renameSession } = useRenameSession()
   const openSearchModal = useSearchModal((state) => state.openModal)
@@ -569,6 +628,7 @@ function ChatSidebarComponent({
   const isConductorActive = pathname === '/conductor'
   const isOperationsActive = pathname === '/operations'
   const isSwarmActive = pathname === '/swarm' || pathname === '/swarm2'
+  const isDesignActive = pathname === '/design'
   const mainRoutes = ['/chat', '/new', '/files', '/terminal']
   const knowledgeRoutes = ['/memory', '/skills']
   const systemRoutes = ['/settings', '/logs']
@@ -825,6 +885,13 @@ function ChatSidebarComponent({
       icon: UsersRound,
       label: 'Swarm',
       active: isSwarmActive,
+    },
+    {
+      kind: 'link',
+      to: '/design',
+      icon: Palette,
+      label: 'Design',
+      active: isDesignActive,
     },
   ]
 
@@ -1127,8 +1194,9 @@ function ChatSidebarComponent({
                     <span
                       className="text-[11px] truncate w-full"
                       style={{ color: 'var(--sidebar-muted)' }}
+                      title={footerSubtitle}
                     >
-                      Pro plan
+                      {footerSubtitle}
                     </span>
                   </motion.div>
                 )}
