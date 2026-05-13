@@ -20,13 +20,17 @@ describe('ChatComposer context controls', () => {
   it('surfaces workspace and reasoning controls next to the model picker', () => {
     const src = source()
 
+    // Workspace chip — renders inline (Hermes-parity), not behind a hamburger
     expect(src).toContain("fetch('/api/workspace')")
-    expect(src).toContain('Workspace context')
+    expect(src).toContain('workspaceContextQuery')
     expect(src).toContain('workspaceSelectMutation')
-    expect(src).toContain('workspaceEntries.map')
+    expect(src).toMatch(/workspaceContextQuery\.data\?\.workspaces[^)]*\)\.map/)
     expect(src).toContain('SEARCH_MODAL_EVENTS.TOGGLE_FILE_EXPLORER')
+    // Reasoning chip — preserved
     expect(src).toContain('Reasoning effort')
     expect(src).toContain("['medium', 'Medium']")
     expect(src).toContain("['high', 'High']")
+    // Chips are NOT nested under a controls hamburger anymore
+    expect(src).not.toContain('isControlsMenuOpen')
   })
 })
