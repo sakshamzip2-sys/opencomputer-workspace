@@ -97,6 +97,7 @@ import { ContextAlertModal } from '@/components/usage-meter/context-alert-modal'
 import { ErrorToastContainer, showErrorToast } from '@/components/error-toast'
 // ContextMeter removed — ContextBar (PR #32) replaces it
 import { useChatStore } from '@/stores/chat-store'
+import { useSessionToolsetsStore } from '@/stores/session-toolsets-store'
 import { useResearchCard } from '@/hooks/use-research-card'
 // MOBILE_TAB_BAR_OFFSET removed — tab bar always hidden in chat
 import { useTapDebug } from '@/hooks/use-tap-debug'
@@ -1911,6 +1912,14 @@ export function ChatScreen({
         }
       }
 
+      // Read per-session toolset override at send-time (subscribes outside
+      // React render). The store is the single source of truth so the
+      // chip in chat-composer and the sender stay in sync without
+      // threading state through props.
+      const enabledToolsets = useSessionToolsetsStore
+        .getState()
+        .getToolsets(sessionKey)
+
       void startStreaming({
         sessionKey,
         friendlyId,
@@ -1922,6 +1931,7 @@ export function ChatScreen({
           currentThinkingLevel === 'off' ? undefined : currentThinkingLevel,
         fastMode,
         model: currentModel || undefined,
+        enabledToolsets,
         idempotencyKey: optimisticClientId || crypto.randomUUID(),
       }).catch((err: unknown) => {
         const messageText = err instanceof Error ? err.message : String(err)

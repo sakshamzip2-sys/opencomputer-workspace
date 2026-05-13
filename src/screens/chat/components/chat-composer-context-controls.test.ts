@@ -31,7 +31,11 @@ describe('ChatComposer context controls', () => {
     expect(src).toContain('Reasoning effort')
     expect(src).toContain("['medium', 'Medium']")
     expect(src).toContain("['high', 'High']")
-    expect(src).toMatch(/thinkingLevel !== 'off' \|\| isClaude46Model/)
+    // Gating now reads provider-capability flag (supportsReasoning).
+    // Heuristic isClaude46Model kept as fallback when /api/model/info has no
+    // capability metadata (vanilla hermes-agent without enhanced-fork).
+    expect(src).toMatch(/thinkingLevel !== 'off' \|\| supportsReasoning/)
+    expect(src).toContain('supports_reasoning')
     // Chips are NOT nested under a controls hamburger anymore
     expect(src).not.toContain('isControlsMenuOpen')
   })

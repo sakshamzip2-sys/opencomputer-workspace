@@ -164,6 +164,11 @@ type ModelInfoApiResponse = {
   gatewayMode?: string | null
   supportsRuntimeSwitching?: boolean | null
   vanillaAgent?: boolean | null
+  // The full upstream model-info payload — surfaces capability flags like
+  // capabilities.supports_reasoning so we can gate UI on real provider
+  // signals instead of model-name string matches. See
+  // src/lib/model-info.ts for the normalize step that carries this through.
+  raw?: Record<string, unknown> | null
 }
 
 type ModelSwitchNotice = {
@@ -944,7 +949,6 @@ function ChatComposerComponent({
     () => getZeroForkModelInfoFlags(modelInfoQuery.data),
     [modelInfoQuery.data],
   )
-
   const profilesQuery = useQuery({
     queryKey: ['profiles', 'composer'],
     queryFn: fetchProfiles,
@@ -956,6 +960,30 @@ function ChatComposerComponent({
     queryFn: fetchWorkspaceContext,
     retry: false,
     staleTime: 30_000,
+  })
+  // Available toolsets list — populates the checkbox UI in the toolsets chip
+  // dropdown. Backed by OC dashboard's /api/v1/tools/toolsets (proxied via
+  // claude-proxy). On failure, dropdown falls back to a freetext input.
+  const toolsetsCatalogQuery = useQuery({
+    queryKey: ['toolsets', 'catalog'],
+    queryFn: async (): Promise<Array<string>> => {
+      try {
+        const res = await fetch('/api/claude-proxy/api/v1/tools/toolsets')
+        if (!res.ok) return []
+        const data = (await res.json()) as {
+          items?: Array<{ name?: string }>
+        }
+        return Array.isArray(data?.items)
+          ? data.items
+              .map((i) => (typeof i?.name === 'string' ? i.name : ''))
+              .filter((n) => n.length > 0)
+          : []
+      } catch {
+        return []
+      }
+    },
+    retry: false,
+    staleTime: 60_000,
   })
   const profileActivateMutation = useMutation({
     mutationFn: activateProfile,
@@ -1015,13 +1043,13 @@ function ChatComposerComponent({
   const setPersistedSessionModel = useSessionModelStore((s) => s.setModel)
 
   // Per-session toolset override (#493 Hermes parity).
-  // Stored client-side via Zustand+localStorage keyed by sessionKey. The
-  // chip + dropdown reads/writes here. The chat-stream sender layer reads
-  // the same store before POSTing to the gateway and includes the list as
-  // `enabled_toolsets` in the body, matching the cron schema shape in
-  // opencomputer/dashboard/routes/cron.py. (Sender wire-through lands in a
-  // followup once the send-stream contract accepts the field — same
-  // pattern as session-model-store today.)
+  // Wire: chip <-> Zustand+localStorage store (this hook) <-> chat-screen
+  // reads the store at send-time and passes enabledToolsets to
+  // startStreaming, which forwards it as `enabled_toolsets` in the
+  // /api/send-stream body. Schema matches opencomputer/dashboard/
+  // routes/cron.py. Backend enforcement is upstream-dependent: the
+  // OC native gateway honors enabled_toolsets; pure OpenAI-compat
+  // upstreams will silently ignore the field.
   const persistedSessionToolsets = useSessionToolsetsStore((s) =>
     s.getToolsets(sessionKey),
   )
@@ -1156,8 +1184,24 @@ function ChatComposerComponent({
     'Workspace'
 
   const currentModel = currentModelQuery.data ?? ''
+  // Real provider-capability flag for reasoning support. Reads
+  // raw.capabilities.supports_reasoning from the normalized /api/model/info
+  // response. Falls back to the legacy isClaude46Model heuristic only when
+  // the upstream payload does not include capability metadata (e.g. vanilla
+  // hermes-agent without enhanced-fork).
+  const supportsReasoning = useMemo<boolean>(() => {
+    const raw = modelInfoQuery.data?.raw
+    if (raw && typeof raw === 'object') {
+      const caps = (raw as Record<string, unknown>).capabilities
+      if (caps && typeof caps === 'object') {
+        const flag = (caps as Record<string, unknown>).supports_reasoning
+        if (typeof flag === 'boolean') return flag
+      }
+    }
+    return isClaude46Model(currentModel)
+  }, [modelInfoQuery.data, currentModel])
 
-  // Auto-switch to hermes-agent model on mount (Hermes Workspace uses Hermes Agent)
+  // Auto-switch to hermes-agent model on mount (OpenComputer uses Hermes Agent)
   // Removed: auto-switch to hermes-agent. The workspace respects the
   // model/provider configured in ~/.hermes/config.yaml. Users switch
   // via the model selector or Settings page.
@@ -1677,8 +1721,8 @@ function ChatComposerComponent({
 
   const hasDraft = value.trim().length > 0 || attachments.length > 0
   const promptPlaceholder = isMobileViewport
-    ? 'Message Hermes…'
-    : 'Message Hermes…'
+    ? 'Message OpenComputer…'
+    : 'Message OpenComputer…'
   const slashCommandQuery = useMemo(() => readSlashCommandQuery(value), [value])
   const isSlashMenuOpen =
     slashCommandQuery !== null && !disabled && !isSlashMenuDismissed
@@ -3002,8 +3046,8 @@ function ChatComposerComponent({
                             Session toolsets
                           </div>
                           <div className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
-                            Comma-separated toolset names. Leave empty for the
-                            global default. Applies to this session only.
+                            Override active toolsets for this session only.
+                            Leave empty for the global default.
                           </div>
                           <div className="mt-2 text-[11px] font-medium text-neutral-600 dark:text-neutral-300">
                             {persistedSessionToolsets &&
@@ -3011,21 +3055,73 @@ function ChatComposerComponent({
                               ? `Active: ${persistedSessionToolsets.join(', ')}`
                               : 'Active: global default'}
                           </div>
-                          <input
-                            type="text"
-                            value={toolsetsDraft}
-                            onChange={(e) => setToolsetsDraft(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault()
-                                handleApplyToolsets()
-                              } else if (e.key === 'Escape') {
-                                setIsToolsetsMenuOpen(false)
+                          {(() => {
+                            const catalog = toolsetsCatalogQuery.data ?? []
+                            // Draft → set of names (case-insensitive), drives checkbox state
+                            const draftSet = new Set(
+                              toolsetsDraft
+                                .split(',')
+                                .map((t) => t.trim())
+                                .filter((t) => t.length > 0),
+                            )
+                            const toggleName = (name: string) => {
+                              const next = new Set(draftSet)
+                              if (next.has(name)) {
+                                next.delete(name)
+                              } else {
+                                next.add(name)
                               }
-                            }}
-                            placeholder="e.g. coding, browse, mcp"
-                            className="mt-2 w-full rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-xs text-neutral-900 placeholder:text-neutral-400 focus:border-accent-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
-                          />
+                              setToolsetsDraft(Array.from(next).join(', '))
+                            }
+                            if (toolsetsCatalogQuery.isLoading) {
+                              return (
+                                <div className="mt-2 text-[11px] italic text-neutral-400">
+                                  Loading toolsets…
+                                </div>
+                              )
+                            }
+                            if (catalog.length === 0) {
+                              // Backend not reachable — fall back to freetext
+                              return (
+                                <input
+                                  type="text"
+                                  value={toolsetsDraft}
+                                  onChange={(e) => setToolsetsDraft(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault()
+                                      handleApplyToolsets()
+                                    } else if (e.key === 'Escape') {
+                                      setIsToolsetsMenuOpen(false)
+                                    }
+                                  }}
+                                  placeholder="e.g. coding, browse, mcp"
+                                  className="mt-2 w-full rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-xs text-neutral-900 placeholder:text-neutral-400 focus:border-accent-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                                />
+                              )
+                            }
+                            return (
+                              <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-800">
+                                {catalog.map((name) => {
+                                  const checked = draftSet.has(name)
+                                  return (
+                                    <label
+                                      key={name}
+                                      className="flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-xs text-neutral-700 transition-colors hover:bg-neutral-50 dark:text-neutral-200 dark:hover:bg-neutral-700/40"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => toggleName(name)}
+                                        className="size-3.5 rounded border-neutral-300 text-accent-500 focus:ring-accent-500 dark:border-neutral-600"
+                                      />
+                                      <span className="truncate">{name}</span>
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            )
+                          })()}
                           <div className="mt-2 flex justify-end gap-1.5">
                             <button
                               type="button"
@@ -3046,11 +3142,12 @@ function ChatComposerComponent({
                       )}
                     </div>
 
-                    {/* Reasoning chip — shown only when explicitly set or supported.
-                        webui shows this conditionally based on model capability;
-                        we surface it whenever any reasoning level has been chosen
-                        OR the user is on a Claude 4.6+ model (which supports it). */}
-                    {(thinkingLevel !== 'off' || isClaude46Model(currentModel)) && (
+                    {/* Reasoning chip — shown only when the active model
+                        actually supports reasoning OR the user has already
+                        set a level. supportsReasoning reads the provider
+                        capability flag from /api/model/info; falls back to
+                        the legacy heuristic if no capability metadata. */}
+                    {(thinkingLevel !== 'off' || supportsReasoning) && (
                     <div
                       className="relative flex min-w-0 items-center"
                       ref={thinkingMenuRef}
