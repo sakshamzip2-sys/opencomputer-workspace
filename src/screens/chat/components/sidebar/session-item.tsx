@@ -1,13 +1,7 @@
 'use client'
 
 import { Link } from '@tanstack/react-router'
-import { HugeiconsIcon } from '@hugeicons/react'
-import {
-  Delete01Icon,
-  MoreHorizontalIcon,
-  Pen01Icon,
-  PinIcon,
-} from '@hugeicons/core-free-icons'
+import { MoreHorizontal, Pencil, Pin, Trash2 } from 'lucide-react'
 import { memo, useMemo } from 'react'
 import { getMessageTimestamp } from '../../utils'
 import type { SessionMeta } from '../../types'
@@ -136,33 +130,23 @@ function SessionItemComponent({
         } catch {}
         onSelect?.()
       }}
+      title={subtitle ? `${baseTitle}\n${subtitle}` : baseTitle}
       className={cn(
         'group inline-flex items-center justify-between',
-        'w-full text-left pl-1.5 pr-0.5 h-14 rounded-lg transition-colors duration-0',
-        'select-none',
-        active
-          ? 'bg-primary-200 text-primary-950'
-          : 'bg-transparent text-primary-950 [&:hover:not(:has(button:hover))]:bg-primary-200',
+        'sidebar-recent w-full text-left pl-2.5 pr-1 h-7 rounded-md select-none',
+        active && 'is-active',
       )}
     >
-      <div className="flex-1 min-w-0 py-1.5">
+      <div className="flex-1 min-w-0">
         <div
           className={cn(
-            'truncate text-sm font-[500]',
-            isGenerating ? 'text-primary-700' : '',
+            'truncate text-[13px] font-normal leading-none',
+            isError && 'text-red-500',
           )}
         >
-          <span className={cn(isGenerating ? 'animate-pulse' : undefined)}>
+          <span className={cn(isGenerating && 'animate-pulse')}>
             {baseTitle}
           </span>
-        </div>
-        <div
-          className={cn(
-            'mt-0.5 text-[11px] text-primary-600 truncate',
-            isError ? 'text-red-600' : undefined,
-          )}
-        >
-          {subtitle}
         </div>
       </div>
       <MenuRoot>
@@ -173,17 +157,14 @@ function SessionItemComponent({
             event.stopPropagation()
           }}
           className={cn(
-            'ml-2 inline-flex size-7 items-center justify-center rounded-md text-primary-700',
-            'opacity-0 transition-opacity group-hover:opacity-100 hover:bg-primary-200 dark:hover:bg-primary-800',
-            'aria-expanded:opacity-100 aria-expanded:bg-primary-200',
+            'ml-1.5 inline-flex size-5 items-center justify-center rounded',
+            'opacity-0 transition-opacity group-hover:opacity-100',
+            'aria-expanded:opacity-100',
           )}
+          style={{ color: 'var(--sidebar-muted)' }}
           aria-label="Session options"
         >
-          <HugeiconsIcon
-            icon={MoreHorizontalIcon}
-            size={20}
-            strokeWidth={1.5}
-          />
+          <MoreHorizontal size={14} strokeWidth={1.5} />
         </MenuTrigger>
         <MenuContent side="bottom" align="end">
           <MenuItem
@@ -194,7 +175,7 @@ function SessionItemComponent({
             }}
             className="gap-2"
           >
-            <HugeiconsIcon icon={PinIcon} size={20} strokeWidth={1.5} />{' '}
+            <Pin size={16} strokeWidth={1.5} />{' '}
             {isPinned ? 'Unpin session' : 'Pin session'}
           </MenuItem>
           <MenuItem
@@ -205,8 +186,7 @@ function SessionItemComponent({
             }}
             className="gap-2"
           >
-            <HugeiconsIcon icon={Pen01Icon} size={20} strokeWidth={1.5} />{' '}
-            Rename
+            <Pencil size={16} strokeWidth={1.5} /> Rename
           </MenuItem>
           <MenuItem
             onClick={(event) => {
@@ -216,8 +196,7 @@ function SessionItemComponent({
             }}
             className="text-red-700 gap-2 hover:bg-red-50 dark:hover:bg-red-900/30/80 data-highlighted:bg-red-50/80"
           >
-            <HugeiconsIcon icon={Delete01Icon} size={20} strokeWidth={1.5} />{' '}
-            Delete
+            <Trash2 size={16} strokeWidth={1.5} /> Delete
           </MenuItem>
         </MenuContent>
       </MenuRoot>

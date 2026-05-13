@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=EB+Garamond:opsz,wght@8..120,400..800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=EB+Garamond:opsz,wght@8..120,400..800&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap');
 @import 'tailwindcss';
 
 /* Tailwind v4 — enable dark: variant on .dark class (set by __root.tsx) */
@@ -1288,10 +1288,17 @@ code {
   color: #fff !important;
 }
 
-/* Composer focus ring for all themes */
-[data-theme] .composer-input:focus-within {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-accent) 65%, transparent);
-  border-color: var(--theme-accent);
+/* Composer focus ring — oc-webui parity (yellow/accent border + 3px glow
+   when textarea or any nested control receives focus). Theme-aware via
+   --theme-accent which already maps to gold/yellow in default/claude themes
+   and re-colours per --data-skin (sienna/poseidon/ares/sisyphus/charizard).
+   The selector is scoped to elements with .composer-input so chip-menu
+   focus inside the composer does NOT double-trigger the ring. */
+.composer-input:focus-within {
+  border-color: var(--theme-accent) !important;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--theme-accent) 18%, transparent),
+    var(--theme-shadow-1) !important;
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -1523,6 +1530,82 @@ code {
       opacity 0.3s ease,
       border-radius 0.3s ease;
   }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Claude.ai-style sidebar palette — theme-independent neutral.
+   Applied to all four claude-* dark + light variants so the sidebar
+   reads as the same chrome regardless of the active accent theme.
+   ════════════════════════════════════════════════════════════════════ */
+
+[data-theme='claude-nous'],
+[data-theme='claude-official'],
+[data-theme='claude-classic'],
+[data-theme='claude-slate'] {
+  --theme-sidebar: #1c1c1c;
+  --theme-panel: #1c1c1c;
+  --sidebar-bg: #1c1c1c;
+  --sidebar-hover: #262626;
+  --sidebar-active: #2b2b2b;
+  --sidebar-border: #2a2a2a;
+  --sidebar-text: #ececec;
+  --sidebar-muted: #9a9a9a;
+  --sidebar-dim: #6e6e6e;
+  --sidebar-accent: #d4a05a;
+}
+
+[data-theme='claude-nous-light'],
+[data-theme='claude-official-light'],
+[data-theme='claude-classic-light'],
+[data-theme='claude-slate-light'] {
+  --theme-sidebar: #f7f7f5;
+  --theme-panel: #f7f7f5;
+  --sidebar-bg: #f7f7f5;
+  --sidebar-hover: #efeeea;
+  --sidebar-active: #e6e5e0;
+  --sidebar-border: #e5e4df;
+  --sidebar-text: #1f1f1f;
+  --sidebar-muted: #595959;
+  --sidebar-dim: #8a8a8a;
+  --sidebar-accent: #9c6b2f;
+}
+
+.sidebar-row {
+  color: var(--sidebar-text);
+  transition: background-color 80ms ease, color 80ms ease;
+}
+.sidebar-row:hover {
+  background-color: var(--sidebar-hover);
+}
+.sidebar-row.is-active {
+  background-color: var(--sidebar-active);
+  color: var(--sidebar-text);
+}
+.sidebar-section-label {
+  color: var(--sidebar-dim);
+}
+.sidebar-recent {
+  color: var(--sidebar-muted);
+  transition: background-color 80ms ease, color 80ms ease;
+}
+.sidebar-recent:hover {
+  background-color: var(--sidebar-hover);
+  color: var(--sidebar-text);
+}
+.sidebar-recent.is-active {
+  background-color: var(--sidebar-active);
+  color: var(--sidebar-text);
+}
+.sidebar-brand {
+  font-family: 'Source Serif 4', 'Tiempos Text', 'New York', Georgia, serif;
+  font-weight: 500;
+  font-feature-settings: 'liga' on, 'kern' on;
+  letter-spacing: -0.01em;
+}
+.sidebar-new-badge {
+  background-color: color-mix(in oklab, var(--sidebar-accent) 16%, transparent);
+  color: var(--sidebar-accent);
+  border: 1px solid color-mix(in oklab, var(--sidebar-accent) 32%, transparent);
 }
 
 /* ════════════════════════════════════════════════════════════════════

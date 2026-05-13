@@ -1,28 +1,27 @@
-import { HugeiconsIcon } from '@hugeicons/react'
 import {
-  ArrowDown01Icon,
-  ArrowLeft01Icon,
-  ArrowRight01Icon,
-  BrainIcon,
-  Building01Icon,
-  Chat01Icon,
-  CheckListIcon,
-  Clock01Icon,
-  ComputerTerminal01Icon,
-  DashboardSquare01Icon,
-  File01Icon,
-  McpServerIcon,
-  MessageMultiple01Icon,
-  Moon02Icon,
-  PencilEdit02Icon,
-  PuzzleIcon,
-  Rocket01Icon,
-  Search01Icon,
-  Settings01Icon,
-  Sun02Icon,
-  UserGroupIcon,
-  UserMultipleIcon,
-} from '@hugeicons/core-free-icons'
+  Brain,
+  ChevronDown,
+  CircleUser,
+  Clock,
+  FileText,
+  KanbanSquare,
+  LayoutDashboard,
+  MessageSquare,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Puzzle,
+  Rocket,
+  Search,
+  Server,
+  Settings,
+  SquarePen,
+  SquareTerminal,
+  Sun,
+  Users,
+  UsersRound,
+  type LucideIcon,
+} from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
@@ -107,15 +106,15 @@ function ThemeToggleMini() {
         applyTheme(nextMode)
         updateSettings({ theme: nextMode })
       }}
-      className="shrink-0 rounded-lg p-1.5 transition-colors hover:opacity-80"
-      style={{ color: 'var(--theme-muted)' }}
+      className="sidebar-row shrink-0 rounded-md p-1.5"
+      style={{ color: 'var(--sidebar-muted)' }}
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
     >
-      <HugeiconsIcon
-        icon={isDark ? Sun02Icon : Moon02Icon}
-        size={16}
-        strokeWidth={1.5}
-      />
+      {isDark ? (
+        <Sun size={16} strokeWidth={1.5} />
+      ) : (
+        <Moon size={16} strokeWidth={1.5} />
+      )}
     </button>
   )
 }
@@ -142,7 +141,7 @@ type NavItemDef = {
   to?: string
   search?: Record<string, unknown>
   hash?: string
-  icon: unknown
+  icon: LucideIcon
   label: string
   active: boolean
   onClick?: () => void
@@ -178,31 +177,20 @@ function NavItem({
 }) {
   const cls = cn(
     buttonVariants({ variant: 'ghost', size: 'sm' }),
-    'w-full h-auto min-h-11 gap-2.5 py-2 md:min-h-0',
-    isCollapsed ? 'justify-center px-0' : 'justify-start px-3',
-    item.active
-      ? 'bg-accent-500/10 text-accent-500 hover:bg-accent-50 dark:hover:bg-accent-900/300/15'
-      : 'text-primary-900 hover:bg-primary-200 dark:hover:bg-primary-800',
+    'sidebar-row w-full h-auto min-h-9 gap-3 py-1.5 md:min-h-0 rounded-md',
+    isCollapsed ? 'justify-center px-0' : 'justify-start px-2.5',
+    item.active && 'is-active',
   )
 
+  const Icon = item.icon
   const iconEl =
     item.badge === 'error-dot' ? (
-      <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-        <HugeiconsIcon
-          icon={item.icon as any}
-          size={20}
-          strokeWidth={1.5}
-          className="size-5 shrink-0"
-        />
+      <span className="relative inline-flex size-[17px] shrink-0 items-center justify-center">
+        <Icon size={17} strokeWidth={1.5} className="size-[17px] shrink-0" />
         <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-red-500" />
       </span>
     ) : (
-      <HugeiconsIcon
-        icon={item.icon as any}
-        size={20}
-        strokeWidth={1.5}
-        className="size-5 shrink-0"
-      />
+      <Icon size={17} strokeWidth={1.5} className="size-[17px] shrink-0" />
     )
 
   const labelEl = (
@@ -220,17 +208,10 @@ function NavItem({
           </span>
           {item.badge && item.badge !== 'error-dot' ? (
             <span
-              className="ml-auto inline-flex min-w-6 items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold leading-none"
-              style={
-                item.badge === 'NEW'
-                  ? {
-                      background: 'linear-gradient(180deg, #fde68a 0%, #fbbf24 50%, #d4a017 100%)',
-                      color: '#0b1320',
-                      boxShadow: '0 0 8px rgba(250,204,21,0.4)',
-                      letterSpacing: '0.08em',
-                    }
-                  : undefined
-              }
+              className={cn(
+                'ml-auto inline-flex min-w-5 items-center justify-center rounded-full px-2 py-0.5 text-[9px] font-semibold leading-none uppercase tracking-wider',
+                item.badge === 'NEW' && 'sidebar-new-badge',
+              )}
             >
               {item.badge}
             </span>
@@ -376,7 +357,7 @@ function SectionLabel({
   if (isCollapsed) return null
 
   const labelContent = (
-    <span className="text-[10px] font-semibold uppercase tracking-wider text-primary-500 dark:text-neutral-400 select-none">
+    <span className="sidebar-section-label text-[12px] font-normal select-none">
       {label}
     </span>
   )
@@ -386,12 +367,12 @@ function SectionLabel({
       <motion.div
         layout
         transition={{ layout: transition }}
-        className="flex items-center gap-1.5 px-3 pt-3 pb-1 w-full"
+        className="flex items-center gap-1.5 px-3 pt-4 pb-1 w-full"
       >
         {navigateTo ? (
           <Link
             to={navigateTo}
-            className="text-[10px] font-semibold uppercase tracking-wider text-primary-500 dark:text-neutral-400 hover:text-primary-700 dark:hover:text-neutral-200 select-none transition-colors"
+            className="sidebar-section-label text-[12px] font-normal select-none transition-colors hover:opacity-80"
           >
             {label}
           </Link>
@@ -401,17 +382,17 @@ function SectionLabel({
         <button
           type="button"
           onClick={onToggle}
-          className="ml-auto p-0.5 rounded hover:bg-primary-200 dark:hover:bg-primary-800 transition-colors"
+          className="sidebar-row ml-auto p-0.5 rounded transition-colors"
           aria-label={expanded ? `Collapse ${label}` : `Expand ${label}`}
         >
-          <HugeiconsIcon
-            icon={ArrowDown01Icon}
+          <ChevronDown
             size={12}
-            strokeWidth={2}
+            strokeWidth={1.5}
             className={cn(
-              'text-primary-500 transition-transform duration-150',
+              'transition-transform duration-150 opacity-60',
               expanded ? 'rotate-0' : '-rotate-90',
             )}
+            style={{ color: 'var(--sidebar-dim)' }}
           />
         </button>
       </motion.div>
@@ -422,12 +403,12 @@ function SectionLabel({
     <motion.div
       layout
       transition={{ layout: transition }}
-      className="px-3 pt-3 pb-1"
+      className="px-3 pt-4 pb-1"
     >
       {navigateTo ? (
         <Link
           to={navigateTo}
-          className="text-[10px] font-semibold uppercase tracking-wider text-primary-500 dark:text-neutral-400 hover:text-primary-700 dark:hover:text-neutral-200 select-none transition-colors"
+          className="sidebar-section-label text-[12px] font-normal select-none transition-colors hover:opacity-80"
         >
           {label}
         </Link>
@@ -569,10 +550,13 @@ function ChatSidebarComponent({
   )
 
   // Route active states
-  const isChatActive =
-    pathname === '/' || pathname === '/new' || pathname.startsWith('/chat')
   const isNewSessionActive =
     pathname === '/new' || pathname.startsWith('/chat/new')
+  // Chat is active for / and /chat/<existing-id>, but NOT for the New Session
+  // routes — those have their own row that should light up exclusively.
+  const isChatActive =
+    !isNewSessionActive &&
+    (pathname === '/' || pathname.startsWith('/chat'))
   const _isSettingsActive = pathname === '/settings'
   const isSkillsActive = pathname === '/skills'
   const isMcpActive = pathname === '/mcp'
@@ -770,7 +754,7 @@ function ChatSidebarComponent({
   // Search button definition (placed above Studio section)
   const searchItem: NavItemDef = {
     kind: 'button',
-    icon: Search01Icon,
+    icon: Search,
     label: 'Search',
     active: isSearchModalOpen,
     onClick: openSearchModal,
@@ -782,82 +766,80 @@ function ChatSidebarComponent({
     {
       kind: 'link',
       to: '/dashboard',
-      icon: DashboardSquare01Icon,
+      icon: LayoutDashboard,
       label: t('nav.dashboard'),
       active: isDashboardActive,
     },
     {
       kind: 'link',
       to: '/chat',
-      icon: MessageMultiple01Icon,
+      icon: MessageSquare,
       label: t('nav.chat'),
       active: isChatActive,
     },
-
     {
       kind: 'link',
       to: '/files',
-      icon: File01Icon,
+      icon: FileText,
       label: t('nav.files'),
       active: isFilesActive,
     },
     {
       kind: 'link',
       to: '/terminal',
-      icon: ComputerTerminal01Icon,
+      icon: SquareTerminal,
       label: t('nav.terminal'),
       active: isTerminalActive,
     },
     {
       kind: 'link',
       to: '/jobs',
-      icon: Clock01Icon,
+      icon: Clock,
       label: t('nav.jobs'),
       active: isJobsActive,
     },
     {
       kind: 'link',
       to: '/tasks',
-      icon: CheckListIcon,
+      icon: KanbanSquare,
       label: 'Kanban',
       active: isTasksActive,
     },
     {
       kind: 'link',
       to: '/conductor',
-      icon: Rocket01Icon,
+      icon: Rocket,
       label: 'Conductor',
       active: isConductorActive,
     },
     {
       kind: 'link',
       to: '/operations',
-      icon: UserMultipleIcon,
+      icon: Users,
       label: 'Operations',
       active: isOperationsActive,
     },
     {
       kind: 'link',
       to: '/swarm',
-      icon: UserGroupIcon,
+      icon: UsersRound,
       label: 'Swarm',
       active: isSwarmActive,
     },
-
   ]
 
   const knowledgeItems: Array<NavItemDef> = [
     {
       kind: 'link',
       to: '/memory',
-      icon: BrainIcon,
+      icon: Brain,
       label: t('nav.memory'),
       active: isMemoryActive,
     },
     {
       kind: 'link',
       to: '/skills',
-      icon: PuzzleIcon,
+      icon: Puzzle,
       label: t('nav.skills'),
       active: isSkillsActive,
       dataTour: 'skills',
@@ -865,14 +847,14 @@ function ChatSidebarComponent({
     {
       kind: 'link',
       to: '/mcp',
-      icon: McpServerIcon,
+      icon: Server,
       label: 'MCP',
       active: isMcpActive,
     },
     {
       kind: 'link',
       to: '/profiles',
-      icon: UserMultipleIcon,
+      icon: CircleUser,
       label: t('nav.profiles'),
       active: pathname === '/profiles',
     },
@@ -931,19 +913,19 @@ function ChatSidebarComponent({
                 to="/chat"
                 className={cn(
                   buttonVariants({ variant: 'ghost', size: 'sm' }),
-                  'w-full pl-1.5 justify-start gap-2',
+                  'sidebar-row w-full pl-1.5 justify-start gap-2.5',
                 )}
               >
                 <img
                   src="/claude-avatar.webp"
-                  alt="Hermes Agent"
-                  className="size-6 rounded-lg"
+                  alt="OpenComputer"
+                  className="size-6 rounded-full"
                 />
                 <span
-                  className="text-sm font-semibold tracking-tight"
-                  style={{ color: 'var(--theme-text)' }}
+                  className="sidebar-brand text-[20px] leading-none"
+                  style={{ color: 'var(--sidebar-text)' }}
                 >
-                  Hermes Workspace
+                  OpenComputer
                 </span>
               </Link>
             </motion.div>
@@ -964,17 +946,9 @@ function ChatSidebarComponent({
                   data-tour="sidebar-collapse-toggle"
                 >
                   {isVisuallyCollapsed ? (
-                    <HugeiconsIcon
-                      icon={ArrowRight01Icon}
-                      size={18}
-                      strokeWidth={1.75}
-                    />
+                    <PanelLeftOpen size={18} strokeWidth={1.5} />
                   ) : (
-                    <HugeiconsIcon
-                      icon={ArrowLeft01Icon}
-                      size={18}
-                      strokeWidth={1.75}
-                    />
+                    <PanelLeftClose size={18} strokeWidth={1.5} />
                   )}
                 </Button>
               }
@@ -1013,17 +987,15 @@ function ChatSidebarComponent({
             }}
             className={cn(
               buttonVariants({ variant: 'ghost', size: 'sm' }),
-              'w-full justify-start gap-2.5 px-3 py-2 text-primary-900 hover:bg-primary-200 dark:hover:bg-primary-800',
-              isNewSessionActive &&
-                'bg-accent-500/10 text-accent-500 hover:bg-accent-50 dark:hover:bg-accent-900/300/15',
+              'sidebar-row w-full justify-start gap-3 px-2.5 py-1.5 min-h-9 rounded-md',
+              isNewSessionActive && 'is-active',
             )}
             data-tour="new-session"
           >
-            <HugeiconsIcon
-              icon={PencilEdit02Icon}
-              size={20}
+            <SquarePen
+              size={17}
               strokeWidth={1.5}
-              className="size-5 shrink-0"
+              className="size-[17px] shrink-0"
             />
             <span>New Session</span>
           </Link>
@@ -1111,12 +1083,15 @@ function ChatSidebarComponent({
       {/* end scrollable body */}
 
       {/* ── Footer with User Menu ─────────────────────────────────── */}
-      <div className="px-2 py-2.5 border-t shrink-0 theme-border theme-panel">
+      <div
+        className="px-2 py-2 border-t shrink-0"
+        style={{ borderColor: 'var(--sidebar-border)' }}
+      >
         {/* User card + actions */}
         <div
           className={cn(
-            'flex items-center rounded-lg transition-colors',
-            isVisuallyCollapsed ? 'flex-col gap-2 py-2' : 'gap-2.5 px-2 py-1.5',
+            'flex items-center rounded-md',
+            isVisuallyCollapsed ? 'flex-col gap-2 py-2' : 'gap-2 px-1 py-1',
           )}
         >
           {/* User menu trigger */}
@@ -1124,7 +1099,7 @@ function ChatSidebarComponent({
             <MenuTrigger
               data-tour="settings"
               className={cn(
-                'flex items-center gap-2.5 rounded-lg py-1 transition-colors hover:bg-primary-200 dark:hover:bg-neutral-800 flex-1 min-w-0',
+                'sidebar-row flex items-center gap-2.5 rounded-md py-1 flex-1 min-w-0',
                 isVisuallyCollapsed ? 'justify-center px-0' : 'px-1.5',
               )}
             >
@@ -1140,12 +1115,21 @@ function ChatSidebarComponent({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={transition}
-                    className="flex-1 min-w-0 flex items-center gap-1.5"
+                    className="flex-1 min-w-0 flex flex-col items-start leading-tight"
                   >
-                    <span className="block truncate text-sm font-medium text-primary-900 dark:text-neutral-100">
-                      {profileDisplayName}
+                    <span
+                      className="flex items-center gap-1.5 text-[13px] font-medium truncate w-full"
+                      style={{ color: 'var(--sidebar-text)' }}
+                    >
+                      <span className="truncate">{profileDisplayName}</span>
+                      <StatusDot />
                     </span>
-                    <StatusDot />
+                    <span
+                      className="text-[11px] truncate w-full"
+                      style={{ color: 'var(--sidebar-muted)' }}
+                    >
+                      Pro plan
+                    </span>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -1158,11 +1142,7 @@ function ChatSidebarComponent({
                 className="justify-between"
               >
                 <span className="flex items-center gap-2">
-                  <HugeiconsIcon
-                    icon={Settings01Icon}
-                    size={20}
-                    strokeWidth={1.5}
-                  />
+                  <Settings size={17} strokeWidth={1.5} />
                   Settings
                 </span>
               </MenuItem>
@@ -1175,14 +1155,11 @@ function ChatSidebarComponent({
               <button
                 type="button"
                 onClick={() => handleOpenSettings('claude')}
-                className="shrink-0 rounded-lg p-1.5 text-primary-400 hover:bg-primary-200 dark:hover:bg-neutral-800 hover:text-primary-600 dark:hover:text-neutral-300 transition-colors"
+                className="sidebar-row shrink-0 rounded-md p-1.5"
+                style={{ color: 'var(--sidebar-muted)' }}
                 aria-label="Settings"
               >
-                <HugeiconsIcon
-                  icon={Settings01Icon}
-                  size={16}
-                  strokeWidth={1.5}
-                />
+                <Settings size={16} strokeWidth={1.5} />
               </button>
               <ThemeToggleMini />
             </div>

@@ -1,7 +1,6 @@
 'use client'
 
-import { HugeiconsIcon } from '@hugeicons/react'
-import { ArrowDown01Icon } from '@hugeicons/core-free-icons'
+import { ChevronDown } from 'lucide-react'
 import { memo, useMemo } from 'react'
 import { SessionItem } from './session-item'
 import type { SessionMeta } from '../../types'
@@ -69,14 +68,14 @@ export const SidebarSessions = memo(function SidebarSessions({
       className="flex h-full flex-col flex-1 min-h-0 w-full"
       defaultOpen={defaultOpen}
     >
-      <CollapsibleTrigger className="w-full flex items-center gap-1.5 rounded-none px-5 pt-3 pb-1 shrink-0 text-[10px] font-semibold uppercase tracking-wider hover:bg-transparent data-panel-open:text-primary-500">
-        <span className="select-none">Sessions</span>
-        <span className="ml-auto p-0.5 rounded hover:bg-primary-200 dark:hover:bg-primary-800 transition-colors">
-          <HugeiconsIcon
-            icon={ArrowDown01Icon}
+      <CollapsibleTrigger className="sidebar-section-label w-full flex items-center gap-1.5 rounded-none px-5 pt-4 pb-1 shrink-0 text-[12px] font-normal hover:bg-transparent">
+        <span className="select-none">Recents</span>
+        <span className="sidebar-row ml-auto p-0.5 rounded transition-colors">
+          <ChevronDown
             size={12}
-            strokeWidth={2}
-            className="text-primary-500 transition-transform duration-150 -rotate-90 group-data-panel-open:rotate-0"
+            strokeWidth={1.5}
+            className="transition-transform duration-150 -rotate-90 group-data-panel-open:rotate-0 opacity-60"
+            style={{ color: 'var(--sidebar-dim)' }}
           />
         </span>
       </CollapsibleTrigger>
