@@ -1288,17 +1288,14 @@ code {
   color: #fff !important;
 }
 
-/* Composer focus ring — oc-webui parity (yellow/accent border + 3px glow
-   when textarea or any nested control receives focus). Theme-aware via
-   --theme-accent which already maps to gold/yellow in default/claude themes
-   and re-colours per --data-skin (sienna/poseidon/ares/sisyphus/charizard).
-   The selector is scoped to elements with .composer-input so chip-menu
-   focus inside the composer does NOT double-trigger the ring. */
+/* Composer focus ring — subtle border darken + soft shadow on focus.
+   Previously this rule painted a yellow 3px accent glow under the claim
+   it was "oc-webui parity" — but the actual oc-webui reference does NOT
+   glow on focus; its composer stays flat with a thin border. This is
+   parity-corrective. */
 .composer-input:focus-within {
-  border-color: var(--theme-accent) !important;
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--theme-accent) 18%, transparent),
-    var(--theme-shadow-1) !important;
+  border-color: var(--composer-border) !important;
+  box-shadow: var(--theme-shadow-1) !important;
 }
 
 /* ════════════════════════════════════════════════════════════════════
