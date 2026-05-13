@@ -45,6 +45,7 @@ import { useSettings } from '@/hooks/use-settings'
 import { MOBILE_TAB_BAR_OFFSET } from '@/components/mobile-tab-bar'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useSessionModelStore } from '@/stores/session-model-store'
+import { useSessionToolsetsStore } from '@/stores/session-toolsets-store'
 import { Button } from '@/components/ui/button'
 import { usePinnedModels } from '@/hooks/use-pinned-models'
 // import { ModeSelector } from '@/components/mode-selector'
@@ -836,6 +837,8 @@ function ChatComposerComponent({
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false)
   const [isThinkingMenuOpen, setIsThinkingMenuOpen] = useState(false)
+  const [isToolsetsMenuOpen, setIsToolsetsMenuOpen] = useState(false)
+  const [toolsetsDraft, setToolsetsDraft] = useState('')
   const [isProviderSwitcherExpanded, setIsProviderSwitcherExpanded] =
     useState(false)
   const [isMobileActionsMenuOpen, setIsMobileActionsMenuOpen] = useState(false)
@@ -869,6 +872,7 @@ function ChatComposerComponent({
   const modelSelectorRef = useRef<HTMLDivElement | null>(null)
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null)
   const thinkingMenuRef = useRef<HTMLDivElement | null>(null)
+  const toolsetsMenuRef = useRef<HTMLDivElement | null>(null)
   const composerWrapperRef = useRef<HTMLDivElement | null>(null)
   const focusFrameRef = useRef<number | null>(null)
 
@@ -1010,6 +1014,20 @@ function ChatComposerComponent({
   )
   const setPersistedSessionModel = useSessionModelStore((s) => s.setModel)
 
+  // Per-session toolset override (#493 Hermes parity).
+  // Stored client-side via Zustand+localStorage keyed by sessionKey. The
+  // chip + dropdown reads/writes here. The chat-stream sender layer reads
+  // the same store before POSTing to the gateway and includes the list as
+  // `enabled_toolsets` in the body, matching the cron schema shape in
+  // opencomputer/dashboard/routes/cron.py. (Sender wire-through lands in a
+  // followup once the send-stream contract accepts the field — same
+  // pattern as session-model-store today.)
+  const persistedSessionToolsets = useSessionToolsetsStore((s) =>
+    s.getToolsets(sessionKey),
+  )
+  const setPersistedSessionToolsets = useSessionToolsetsStore((s) => s.setToolsets)
+  const clearPersistedSessionToolsets = useSessionToolsetsStore((s) => s.clearToolsets)
+
   // Model switching is now per-session via the persistent store above.
   // Previously this issued a PATCH /api/hermes-proxy/api/config to write to
   // ~/.hermes/config.yaml — that endpoint 404s and would clobber the global
@@ -1068,6 +1086,56 @@ function ChatComposerComponent({
     setIsWorkspaceMenuOpen(false)
     emitSearchModalEvent(SEARCH_MODAL_EVENTS.TOGGLE_FILE_EXPLORER)
   }, [])
+
+  const toolsetsLabel = useMemo(() => {
+    if (!persistedSessionToolsets || persistedSessionToolsets.length === 0) {
+      return 'Default'
+    }
+    if (persistedSessionToolsets.length === 1) return persistedSessionToolsets[0]
+    return `${persistedSessionToolsets[0]} +${persistedSessionToolsets.length - 1}`
+  }, [persistedSessionToolsets])
+
+  const openToolsetsMenu = useCallback(() => {
+    setToolsetsDraft(
+      persistedSessionToolsets && persistedSessionToolsets.length > 0
+        ? persistedSessionToolsets.join(', ')
+        : '',
+    )
+    setIsToolsetsMenuOpen(true)
+    setIsProfileMenuOpen(false)
+    setIsWorkspaceMenuOpen(false)
+    setIsModelMenuOpen(false)
+    setIsThinkingMenuOpen(false)
+  }, [persistedSessionToolsets])
+
+  const handleApplyToolsets = useCallback(() => {
+    if (!sessionKey) return
+    const list = toolsetsDraft
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0)
+    if (list.length === 0) {
+      clearPersistedSessionToolsets(sessionKey)
+      toast('Toolsets cleared — using global default')
+    } else {
+      setPersistedSessionToolsets(sessionKey, list)
+      toast(`Toolsets: ${list.join(', ')}`)
+    }
+    setIsToolsetsMenuOpen(false)
+  }, [
+    sessionKey,
+    toolsetsDraft,
+    setPersistedSessionToolsets,
+    clearPersistedSessionToolsets,
+  ])
+
+  const handleClearToolsets = useCallback(() => {
+    if (!sessionKey) return
+    clearPersistedSessionToolsets(sessionKey)
+    setToolsetsDraft('')
+    setIsToolsetsMenuOpen(false)
+    toast('Toolsets cleared — using global default')
+  }, [sessionKey, clearPersistedSessionToolsets])
 
   const activeProfileName =
     profilesQuery.data?.activeProfile ||
@@ -1239,7 +1307,8 @@ function ChatComposerComponent({
       !isModelMenuOpen &&
       !isProfileMenuOpen &&
       !isWorkspaceMenuOpen &&
-      !isThinkingMenuOpen
+      !isThinkingMenuOpen &&
+      !isToolsetsMenuOpen
     )
       return
     function handleOutsideClick(event: MouseEvent) {
@@ -1248,11 +1317,13 @@ function ChatComposerComponent({
       if (profileMenuRef.current?.contains(target)) return
       if (workspaceMenuRef.current?.contains(target)) return
       if (thinkingMenuRef.current?.contains(target)) return
+      if (toolsetsMenuRef.current?.contains(target)) return
       setIsModelMenuOpen(false)
       setIsProviderSwitcherExpanded(false)
       setIsProfileMenuOpen(false)
       setIsWorkspaceMenuOpen(false)
       setIsThinkingMenuOpen(false)
+      setIsToolsetsMenuOpen(false)
     }
 
     document.addEventListener('mousedown', handleOutsideClick)
@@ -1264,6 +1335,7 @@ function ChatComposerComponent({
     isProfileMenuOpen,
     isWorkspaceMenuOpen,
     isThinkingMenuOpen,
+    isToolsetsMenuOpen,
   ])
 
   const persistDraft = useCallback(
@@ -2595,6 +2667,11 @@ function ChatComposerComponent({
 
                 {!hideModelSelector ? (
                   <>
+                    {/* Composer divider — Hermes parity (separates icon controls from chip strip) */}
+                    <div
+                      className="mx-1 hidden h-5 w-px self-center bg-primary-200/60 dark:bg-primary-700/40 md:block"
+                      aria-hidden="true"
+                    />
                     {/* Profile chip — hoisted inline (Hermes parity) */}
                     <div
                       className="relative ml-0.5 flex min-w-0 items-center"
@@ -2661,33 +2738,50 @@ function ChatComposerComponent({
                       )}
                     </div>
 
-                    {/* Workspace (home) chip — Hermes parity, NEW */}
+                    {/* Workspace group — files-toggle btn (left) + workspace chip (right) */}
                     <div
                       className="relative flex min-w-0 items-center"
                       ref={workspaceMenuRef}
                     >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsWorkspaceMenuOpen((open) => !open)
-                          setIsProfileMenuOpen(false)
-                          setIsThinkingMenuOpen(false)
-                          setIsModelMenuOpen(false)
-                        }}
-                        disabled={disabled || workspaceSelectMutation.isPending}
-                        className="inline-flex h-8 max-w-[10rem] items-center gap-1.5 rounded-full bg-primary-100/70 px-2.5 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-200/80 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-primary-800/60"
-                        title={
-                          workspaceContextQuery.data?.path
-                            ? `${workspaceContextQuery.data.folderName ?? 'Workspace'} · ${workspaceContextQuery.data.path}`
-                            : 'Switch workspace'
-                        }
+                      <div
+                        role="group"
+                        aria-label="Workspace controls"
+                        className="inline-flex h-8 items-stretch overflow-hidden rounded-full bg-primary-100/70 transition-colors hover:bg-primary-200/80 dark:hover:bg-primary-800/60"
                       >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                        </svg>
-                        <span className="truncate">{workspaceContextQuery.data?.folderName ?? 'Home'}</span>
-                        <HugeiconsIcon icon={ArrowDown01Icon} size={11} />
-                      </button>
+                        <button
+                          type="button"
+                          onClick={handleOpenWorkspaceManager}
+                          disabled={disabled}
+                          className="inline-flex items-center justify-center px-2.5 text-primary-600 transition-colors hover:text-primary-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-primary-400"
+                          title="Toggle workspace files panel"
+                          aria-label="Toggle workspace files panel"
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                          </svg>
+                        </button>
+                        <div className="w-px self-stretch bg-primary-200/60 dark:bg-primary-700/40" aria-hidden="true" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsWorkspaceMenuOpen((open) => !open)
+                            setIsProfileMenuOpen(false)
+                            setIsThinkingMenuOpen(false)
+                            setIsModelMenuOpen(false)
+                            setIsToolsetsMenuOpen(false)
+                          }}
+                          disabled={disabled || workspaceSelectMutation.isPending}
+                          className="inline-flex max-w-[10rem] items-center gap-1.5 px-2.5 text-xs font-medium text-primary-600 transition-colors hover:text-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={
+                            workspaceContextQuery.data?.path
+                              ? `${workspaceContextQuery.data.folderName ?? 'Workspace'} · ${workspaceContextQuery.data.path}`
+                              : 'Switch workspace'
+                          }
+                        >
+                          <span className="truncate">{workspaceContextQuery.data?.folderName ?? 'Home'}</span>
+                          <HugeiconsIcon icon={ArrowDown01Icon} size={11} />
+                        </button>
+                      </div>
                       {isWorkspaceMenuOpen && (
                         <div className="absolute bottom-full left-0 z-[200] mb-2 min-w-[16rem] max-w-[22rem] overflow-hidden rounded-xl border border-neutral-200 bg-white p-1 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-150 dark:border-neutral-700 dark:bg-neutral-900">
                           <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
@@ -2870,7 +2964,93 @@ function ChatComposerComponent({
                       )}
                     </div>
 
-                    {/* Reasoning (mode) chip — hoisted inline */}
+                    {/* Toolsets chip — Hermes parity (real 4th chip from webui) */}
+                    <div
+                      className="relative flex min-w-0 items-center"
+                      ref={toolsetsMenuRef}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          isToolsetsMenuOpen
+                            ? setIsToolsetsMenuOpen(false)
+                            : openToolsetsMenu()
+                        }
+                        disabled={disabled || !sessionKey}
+                        className={cn(
+                          'inline-flex h-8 max-w-[10rem] items-center gap-1.5 rounded-full bg-primary-100/70 px-2.5 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-200/80 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-primary-800/60',
+                          persistedSessionToolsets &&
+                            persistedSessionToolsets.length > 0 &&
+                            'text-accent-500',
+                        )}
+                        title={
+                          persistedSessionToolsets &&
+                          persistedSessionToolsets.length > 0
+                            ? `Session toolsets: ${persistedSessionToolsets.join(', ')}`
+                            : 'Session toolsets (global default)'
+                        }
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                        </svg>
+                        <span className="truncate">{toolsetsLabel}</span>
+                        <HugeiconsIcon icon={ArrowDown01Icon} size={11} />
+                      </button>
+                      {isToolsetsMenuOpen && (
+                        <div className="absolute bottom-full left-0 z-[200] mb-2 w-72 overflow-hidden rounded-xl border border-neutral-200 bg-white p-3 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-150 dark:border-neutral-700 dark:bg-neutral-900">
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+                            Session toolsets
+                          </div>
+                          <div className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+                            Comma-separated toolset names. Leave empty for the
+                            global default. Applies to this session only.
+                          </div>
+                          <div className="mt-2 text-[11px] font-medium text-neutral-600 dark:text-neutral-300">
+                            {persistedSessionToolsets &&
+                            persistedSessionToolsets.length > 0
+                              ? `Active: ${persistedSessionToolsets.join(', ')}`
+                              : 'Active: global default'}
+                          </div>
+                          <input
+                            type="text"
+                            value={toolsetsDraft}
+                            onChange={(e) => setToolsetsDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                handleApplyToolsets()
+                              } else if (e.key === 'Escape') {
+                                setIsToolsetsMenuOpen(false)
+                              }
+                            }}
+                            placeholder="e.g. coding, browse, mcp"
+                            className="mt-2 w-full rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-xs text-neutral-900 placeholder:text-neutral-400 focus:border-accent-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                          />
+                          <div className="mt-2 flex justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={handleClearToolsets}
+                              className="rounded-md px-2 py-1 text-[11px] font-medium text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                            >
+                              Clear (global)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleApplyToolsets}
+                              className="rounded-md bg-accent-500 px-2 py-1 text-[11px] font-medium text-white transition-colors hover:bg-accent-600"
+                            >
+                              Apply
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Reasoning chip — shown only when explicitly set or supported.
+                        webui shows this conditionally based on model capability;
+                        we surface it whenever any reasoning level has been chosen
+                        OR the user is on a Claude 4.6+ model (which supports it). */}
+                    {(thinkingLevel !== 'off' || isClaude46Model(currentModel)) && (
                     <div
                       className="relative flex min-w-0 items-center"
                       ref={thinkingMenuRef}
@@ -2882,6 +3062,7 @@ function ChatComposerComponent({
                           setIsProfileMenuOpen(false)
                           setIsWorkspaceMenuOpen(false)
                           setIsModelMenuOpen(false)
+                          setIsToolsetsMenuOpen(false)
                         }}
                         className={cn(
                           'inline-flex h-8 items-center gap-1.5 rounded-full bg-primary-100/70 px-2.5 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-200/80 dark:hover:bg-primary-800/60',
@@ -2922,6 +3103,7 @@ function ChatComposerComponent({
                         </div>
                       )}
                     </div>
+                    )}
                   </>
                 ) : null}
               </div>

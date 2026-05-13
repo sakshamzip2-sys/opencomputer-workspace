@@ -630,8 +630,10 @@ const config = defineConfig(({ mode, command }) => {
             }
           })
 
-          // Auto-start hermes-agent when dev server launches
-          if (command === 'serve') {
+          // Auto-start hermes-agent when dev server launches.
+          // Skip under vitest — tests should not spawn a live gateway
+          // (avoids credential leakage via stdout + flaky network calls).
+          if (command === 'serve' && !process.env.VITEST) {
             void startClaudeAgent()
           }
 
@@ -647,6 +649,7 @@ const config = defineConfig(({ mode, command }) => {
 
           if (
             command !== 'serve' ||
+            process.env.VITEST ||
             workspaceDaemonStarted ||
             workspaceDaemonStarting
           )
