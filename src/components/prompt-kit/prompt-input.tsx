@@ -160,7 +160,9 @@ function PromptInput({
           onClick={handleClick}
           onPointerDown={handlePointerDown}
           className={cn(
-            'cursor-text rounded-3xl py-3 gap-3 flex flex-col touch-manipulation mb-2',
+            // composer-input class enables the global focus-within ring rule in
+            // styles.css (yellow border + glow on focus, mirroring oc-webui).
+            'composer-input cursor-text rounded-3xl py-3 gap-3 flex flex-col touch-manipulation mb-2 transition-[border-color,box-shadow] duration-150',
             disabled && 'cursor-not-allowed opacity-60',
             className,
           )}

@@ -126,12 +126,12 @@ export const Route = createRootRoute({
           'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-visual',
       },
       {
-        title: 'Hermes Workspace',
+        title: 'OpenComputer',
       },
       {
         name: 'description',
         content:
-          'Hermes Agent workspace for chat, tools, files, memory, and jobs.',
+          'OpenComputer — chat, tools, files, memory, and jobs.',
       },
       {
         property: 'og:image',

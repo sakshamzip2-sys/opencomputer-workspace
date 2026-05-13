@@ -1605,8 +1605,8 @@ function ChatComposerComponent({
 
   const hasDraft = value.trim().length > 0 || attachments.length > 0
   const promptPlaceholder = isMobileViewport
-    ? 'Message Hermes…'
-    : 'Message Hermes…'
+    ? 'Message OpenComputer…'
+    : 'Message OpenComputer…'
   const slashCommandQuery = useMemo(() => readSlashCommandQuery(value), [value])
   const isSlashMenuOpen =
     slashCommandQuery !== null && !disabled && !isSlashMenuDismissed
