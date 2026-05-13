@@ -116,10 +116,19 @@ function nextThinkingLevel(level: ThinkingLevel): ThinkingLevel {
   return 'off'
 }
 
-/** Returns true if the model id suggests Claude 4.6 (should default to adaptive) */
+/** Returns true if the model id suggests Claude 4.6+ (4-6, 4-7, 4-8, …).
+ * Used as a fallback when the provider-capability flag is unavailable
+ * (vanilla hermes-agent without enhanced-fork returns raw=null on
+ * /api/model/info). Match the family pattern so newer Opus/Sonnet/Haiku
+ * variants (4-7, 4-8, …) are also gated as reasoning-capable.
+ */
 function isClaude46Model(model: string): boolean {
   const normalized = model.toLowerCase()
-  return normalized.includes('4-6') || normalized.includes('claude-4.6')
+  if (normalized.includes('claude-4.6')) return true
+  // Match the "4-N" / "4.N" family for N >= 6 so 4-7, 4-8, … all qualify.
+  const m = normalized.match(/(?:claude[-/])?(?:opus|sonnet|haiku)?[-/]?4[-.](\d+)/)
+  if (m && Number(m[1]) >= 6) return true
+  return false
 }
 
 type SessionStatusApiResponse = {
