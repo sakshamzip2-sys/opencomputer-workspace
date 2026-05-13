@@ -1605,8 +1605,8 @@ function ChatComposerComponent({
 
   const hasDraft = value.trim().length > 0 || attachments.length > 0
   const promptPlaceholder = isMobileViewport
-    ? 'Message Hermes…'
-    : 'Message Hermes…'
+    ? 'Message OpenComputer…'
+    : 'Message OpenComputer…'
   const slashCommandQuery = useMemo(() => readSlashCommandQuery(value), [value])
   const isSlashMenuOpen =
     slashCommandQuery !== null && !disabled && !isSlashMenuDismissed
@@ -2569,6 +2569,67 @@ function ChatComposerComponent({
                     />
                   </Button>
                 </PromptInputAction>
+                {voiceInput.isSupported || voiceRecorder.isSupported ? (
+                  <PromptInputAction
+                    tooltip={
+                      voiceRecorder.isRecording
+                        ? `Recording… ${Math.round(voiceRecorder.durationMs / 1000)}s`
+                        : voiceInput.isListening
+                          ? 'Listening — tap to stop'
+                          : 'Tap: dictate · Hold: voice note'
+                    }
+                  >
+                    <Button
+                      onClick={() => {
+                        if (voiceInput.isListening) {
+                          voiceInput.stop()
+                        } else if (voiceRecorder.isRecording) {
+                          voiceRecorder.stop()
+                        } else {
+                          voiceInput.start()
+                        }
+                      }}
+                      onPointerDown={handleMicPointerDown}
+                      onPointerUp={handleMicPointerUp}
+                      onPointerLeave={handleMicPointerUp}
+                      size="icon-sm"
+                      variant="ghost"
+                      className={cn(
+                        'rounded-lg transition-colors select-none relative',
+                        voiceRecorder.isRecording
+                          ? 'text-red-600 bg-red-100 hover:bg-red-200 animate-pulse'
+                          : voiceInput.isListening
+                            ? 'text-red-500 bg-red-50 hover:bg-red-100 animate-pulse'
+                            : 'text-primary-500 hover:bg-primary-100 dark:hover:bg-primary-800 hover:text-primary-700',
+                      )}
+                      aria-label={
+                        voiceRecorder.isRecording
+                          ? 'Recording voice note'
+                          : voiceInput.isListening
+                            ? 'Stop listening'
+                            : 'Voice input'
+                      }
+                      disabled={disabled}
+                    >
+                      <HugeiconsIcon
+                        icon={Mic01Icon}
+                        size={20}
+                        strokeWidth={1.5}
+                      />
+                      {voiceRecorder.isRecording ? (
+                        <span className="absolute -top-1 -right-1 flex size-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                          <span className="relative inline-flex size-3 rounded-full bg-red-500" />
+                        </span>
+                      ) : null}
+                    </Button>
+                  </PromptInputAction>
+                ) : null}
+                {/* Vertical divider between input affordances and chips — oc-webui parity */}
+                <div
+                  aria-hidden="true"
+                  className="mx-1 h-5 w-px shrink-0 bg-primary-200/60 dark:bg-primary-700/60"
+                />
                 {hasDraft && !isLoading && (
                   <PromptInputAction tooltip="Clear draft">
                     <Button
@@ -2609,7 +2670,7 @@ function ChatComposerComponent({
                           setIsModelMenuOpen(false)
                         }}
                         disabled={disabled || profileActivateMutation.isPending}
-                        className="inline-flex h-8 max-w-[8rem] items-center gap-1.5 rounded-full bg-primary-100/70 px-2.5 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-200/80 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-primary-800/60"
+                        className="theme-accent-text inline-flex h-8 max-w-[8rem] items-center gap-1.5 rounded-full bg-primary-100/70 px-2.5 text-xs font-semibold transition-colors hover:bg-primary-200/80 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-primary-800/60"
                         title={
                           activeProfile
                             ? `${activeProfile.name}${profileMeta(activeProfile) ? ` · ${profileMeta(activeProfile)}` : ''}`
@@ -2927,75 +2988,19 @@ function ChatComposerComponent({
               </div>
               <div className="ml-1 flex shrink-0 items-center gap-0.5 md:gap-1">
                 <ContextBar compact sessionId={sessionKey} />
-                {voiceInput.isSupported || voiceRecorder.isSupported ? (
-                  <PromptInputAction
-                    tooltip={
-                      voiceRecorder.isRecording
-                        ? `Recording… ${Math.round(voiceRecorder.durationMs / 1000)}s`
-                        : voiceInput.isListening
-                          ? 'Listening — tap to stop'
-                          : 'Tap: dictate · Hold: voice note'
-                    }
-                  >
-                    <Button
-                      onClick={() => {
-                        if (voiceInput.isListening) {
-                          voiceInput.stop()
-                        } else if (voiceRecorder.isRecording) {
-                          voiceRecorder.stop()
-                        } else {
-                          voiceInput.start()
-                        }
-                      }}
-                      onPointerDown={handleMicPointerDown}
-                      onPointerUp={handleMicPointerUp}
-                      onPointerLeave={handleMicPointerUp}
-                      size="icon-sm"
-                      variant="ghost"
-                      className={cn(
-                        'rounded-lg transition-colors select-none',
-                        voiceRecorder.isRecording
-                          ? 'text-red-600 bg-red-100 hover:bg-red-200 animate-pulse'
-                          : voiceInput.isListening
-                            ? 'text-red-500 bg-red-50 hover:bg-red-100 animate-pulse'
-                            : 'text-primary-500 hover:bg-primary-100 dark:hover:bg-primary-800 hover:text-primary-700',
-                      )}
-                      aria-label={
-                        voiceRecorder.isRecording
-                          ? 'Recording voice note'
-                          : voiceInput.isListening
-                            ? 'Stop listening'
-                            : 'Voice input'
-                      }
-                      disabled={disabled}
-                    >
-                      <HugeiconsIcon
-                        icon={Mic01Icon}
-                        size={20}
-                        strokeWidth={1.5}
-                      />
-                      {voiceRecorder.isRecording ? (
-                        <span className="absolute -top-1 -right-1 flex size-3">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                          <span className="relative inline-flex size-3 rounded-full bg-red-500" />
-                        </span>
-                      ) : null}
-                    </Button>
-                  </PromptInputAction>
-                ) : null}
                 {isLoading ? (
                   <PromptInputAction tooltip="Stop generation">
                     <Button
                       onClick={handleAbort}
                       size="icon-sm"
                       variant="destructive"
-                      className="rounded-md"
+                      className="size-9 rounded-full bg-red-500 text-white shadow-md shadow-red-500/30 hover:bg-red-600 hover:scale-110 active:scale-95"
                       aria-label="Stop generation"
                     >
                       <HugeiconsIcon
                         icon={StopIcon}
-                        size={20}
-                        strokeWidth={1.5}
+                        size={18}
+                        strokeWidth={2}
                       />
                     </Button>
                   </PromptInputAction>
