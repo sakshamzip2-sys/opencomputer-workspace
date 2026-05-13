@@ -18,6 +18,9 @@ type DesignStatus = {
   url: string
   home: string | null
   log_path: string
+  /** True when GET / returns the built Next.js SPA. False = daemon is
+   *  up but apps/web/out is missing → iframe would 404. */
+  web_served: boolean
   error: string | null
 }
 
@@ -58,15 +61,18 @@ export function DesignScreen() {
   const [iframeKey, setIframeKey] = useState(0)
   const [frameError, setFrameError] = useState<string | null>(null)
 
-  // Poll every 2s when the daemon is down (waiting for it to come up);
-  // 30s when it's up (just keep-alive). Stops polling when tab is hidden
-  // — react-query handles `refetchIntervalInBackground: false` by default.
+  // Polling tiers: 2s while spinning up (daemon down OR up-but-SPA-not-yet
+  // served — usually a 1-2s race when daemon binds before the build
+  // finishes); 30s in steady state (running + web served). Background
+  // refetches are off by default in react-query so we don't burn CPU
+  // when the tab is hidden.
   const statusQuery = useQuery({
     queryKey: STATUS_QUERY_KEY,
     queryFn: fetchStatus,
     refetchInterval: (query) => {
-      const ok = query.state.data?.ok && query.state.data?.status?.running
-      return ok ? 30_000 : 2_000
+      const status = query.state.data?.status
+      const fullyReady = query.state.data?.ok && status?.running && status?.web_served
+      return fullyReady ? 30_000 : 2_000
     },
     staleTime: 1_000,
   })
@@ -149,10 +155,15 @@ export function DesignScreen() {
         </div>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {status?.running ? (
+          {status?.running && status?.web_served ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-500">
               <span className="size-1.5 rounded-full bg-emerald-500" />
-              Running · port {status.port}
+              Ready · port {status.port}
+            </span>
+          ) : status?.running ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-500">
+              <span className="size-1.5 rounded-full bg-amber-500" />
+              SPA missing · port {status.port}
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-500">
@@ -219,6 +230,21 @@ export function DesignScreen() {
                 ? `Source tree: ${status.home}`
                 : 'OPEN_DESIGN_HOME is not set. See the open-design plugin README for setup.'
             }
+          />
+        ) : !status.web_served ? (
+          <CenteredCard
+            title="Daemon up, but the SPA isn't built"
+            body={
+              status.error ??
+              'The Next.js export at apps/web/out is missing. The daemon serves the API on this port but cannot render the UI.'
+            }
+            hint={
+              status.home
+                ? `Run "pnpm --filter @open-design/web build" in ${status.home}, then click Restart.`
+                : 'See the open-design plugin README for build steps.'
+            }
+            actionLabel="Restart daemon"
+            onAction={() => restartMutation.mutate()}
           />
         ) : frameError ? (
           <CenteredCard
