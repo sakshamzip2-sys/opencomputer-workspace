@@ -47,6 +47,7 @@ import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useSessionModelStore } from '@/stores/session-model-store'
 import { useSessionToolsetsStore } from '@/stores/session-toolsets-store'
 import { Button } from '@/components/ui/button'
+import { ComposerChip } from '@/components/composer-chip'
 import { usePinnedModels } from '@/hooks/use-pinned-models'
 // import { ModeSelector } from '@/components/mode-selector'
 import { cn } from '@/lib/utils'
@@ -2677,7 +2678,7 @@ function ChatComposerComponent({
               className="min-h-[44px]"
             />
             <PromptInputActions className="justify-between px-1.5 md:px-3 gap-0.5 md:gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-0 md:gap-1">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-y-1 gap-x-0 md:gap-x-1">
                 <PromptInputAction tooltip="Add attachment">
                   <Button
                     size="icon-sm"
@@ -2730,29 +2731,30 @@ function ChatComposerComponent({
                       className="relative ml-0.5 flex min-w-0 items-center"
                       ref={profileMenuRef}
                     >
-                      <button
-                        type="button"
+                      <ComposerChip
+                        maxWidthClass="max-w-[8rem]"
+                        ariaExpanded={isProfileMenuOpen}
                         onClick={() => {
                           setIsProfileMenuOpen((open) => !open)
                           setIsWorkspaceMenuOpen(false)
                           setIsThinkingMenuOpen(false)
                           setIsModelMenuOpen(false)
+                          setIsToolsetsMenuOpen(false)
                         }}
                         disabled={disabled || profileActivateMutation.isPending}
-                        className="inline-flex h-8 max-w-[8rem] items-center gap-1.5 rounded-full bg-primary-100/70 px-2.5 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-200/80 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-primary-800/60"
                         title={
                           activeProfile
                             ? `${activeProfile.name}${profileMeta(activeProfile) ? ` · ${profileMeta(activeProfile)}` : ''}`
                             : activeProfileName
                         }
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                          <circle cx="12" cy="7" r="4" />
-                        </svg>
-                        <span className="truncate">{activeProfileName}</span>
-                        <HugeiconsIcon icon={ArrowDown01Icon} size={11} />
-                      </button>
+                        icon={
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                          </svg>
+                        }
+                        label={activeProfileName}
+                      />
                       {isProfileMenuOpen && (
                         <div className="absolute bottom-full left-0 z-[200] mb-2 min-w-[14rem] overflow-hidden rounded-xl border border-neutral-200 bg-white p-1 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-150 dark:border-neutral-700 dark:bg-neutral-900">
                           <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
@@ -2900,29 +2902,30 @@ function ChatComposerComponent({
                       className="relative flex min-w-0 items-center"
                       ref={modelSelectorRef}
                     >
-                      <button
-                        type="button"
+                      <ComposerChip
+                        maxWidthClass="max-w-[12rem]"
+                        ariaExpanded={isModelMenuOpen}
                         onClick={() => {
                           setIsModelMenuOpen((prev) => !prev)
                           setIsProfileMenuOpen(false)
                           setIsWorkspaceMenuOpen(false)
                           setIsThinkingMenuOpen(false)
+                          setIsToolsetsMenuOpen(false)
                         }}
                         disabled={isModelSwitcherDisabled}
-                        className="inline-flex h-8 max-w-[12rem] items-center gap-1.5 rounded-full bg-primary-100/70 px-2.5 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-200/80 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-primary-800/60"
                         title={modelButtonLabel}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <rect x="4" y="4" width="16" height="16" rx="2" />
-                          <rect x="9" y="9" width="6" height="6" />
-                          <path d="M15 2v2" /><path d="M15 20v2" />
-                          <path d="M2 15h2" /><path d="M2 9h2" />
-                          <path d="M20 15h2" /><path d="M20 9h2" />
-                          <path d="M9 2v2" /><path d="M9 20v2" />
-                        </svg>
-                        <span className="truncate">{modelButtonLabel}</span>
-                        <HugeiconsIcon icon={ArrowDown01Icon} size={11} />
-                      </button>
+                        icon={
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <rect x="4" y="4" width="16" height="16" rx="2" />
+                            <rect x="9" y="9" width="6" height="6" />
+                            <path d="M15 2v2" /><path d="M15 20v2" />
+                            <path d="M2 15h2" /><path d="M2 9h2" />
+                            <path d="M20 15h2" /><path d="M20 9h2" />
+                            <path d="M9 2v2" /><path d="M9 20v2" />
+                          </svg>
+                        }
+                        label={modelButtonLabel}
+                      />
                       {isModelMenuOpen && !isMobileViewport && (
                         <>
                           <div className="fixed inset-0 z-[199]" onClick={() => setIsModelMenuOpen(false)} />
@@ -3022,33 +3025,32 @@ function ChatComposerComponent({
                       className="relative flex min-w-0 items-center"
                       ref={toolsetsMenuRef}
                     >
-                      <button
-                        type="button"
+                      <ComposerChip
+                        maxWidthClass="max-w-[10rem]"
+                        ariaExpanded={isToolsetsMenuOpen}
                         onClick={() =>
                           isToolsetsMenuOpen
                             ? setIsToolsetsMenuOpen(false)
                             : openToolsetsMenu()
                         }
                         disabled={disabled || !sessionKey}
-                        className={cn(
-                          'inline-flex h-8 max-w-[10rem] items-center gap-1.5 rounded-full bg-primary-100/70 px-2.5 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-200/80 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-primary-800/60',
-                          persistedSessionToolsets &&
-                            persistedSessionToolsets.length > 0 &&
-                            'text-accent-500',
-                        )}
+                        active={
+                          !!(persistedSessionToolsets &&
+                          persistedSessionToolsets.length > 0)
+                        }
                         title={
                           persistedSessionToolsets &&
                           persistedSessionToolsets.length > 0
                             ? `Session toolsets: ${persistedSessionToolsets.join(', ')}`
                             : 'Session toolsets (global default)'
                         }
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-                        </svg>
-                        <span className="truncate">{toolsetsLabel}</span>
-                        <HugeiconsIcon icon={ArrowDown01Icon} size={11} />
-                      </button>
+                        icon={
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                          </svg>
+                        }
+                        label={toolsetsLabel}
+                      />
                       {isToolsetsMenuOpen && (
                         <div className="absolute bottom-full left-0 z-[200] mb-2 w-72 overflow-hidden rounded-xl border border-neutral-200 bg-white p-3 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-150 dark:border-neutral-700 dark:bg-neutral-900">
                           <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
@@ -3161,8 +3163,8 @@ function ChatComposerComponent({
                       className="relative flex min-w-0 items-center"
                       ref={thinkingMenuRef}
                     >
-                      <button
-                        type="button"
+                      <ComposerChip
+                        ariaExpanded={isThinkingMenuOpen}
                         onClick={() => {
                           setIsThinkingMenuOpen((open) => !open)
                           setIsProfileMenuOpen(false)
@@ -3170,19 +3172,16 @@ function ChatComposerComponent({
                           setIsModelMenuOpen(false)
                           setIsToolsetsMenuOpen(false)
                         }}
-                        className={cn(
-                          'inline-flex h-8 items-center gap-1.5 rounded-full bg-primary-100/70 px-2.5 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-200/80 dark:hover:bg-primary-800/60',
-                          thinkingLevel === 'off' && 'opacity-70',
-                        )}
+                        className={cn(thinkingLevel === 'off' && 'opacity-70')}
                         title={`Reasoning effort: ${thinkingLabel(thinkingLevel)}`}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" />
-                          <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" />
-                        </svg>
-                        <span>{thinkingLabel(thinkingLevel)}</span>
-                        <HugeiconsIcon icon={ArrowDown01Icon} size={11} />
-                      </button>
+                        icon={
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" />
+                            <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" />
+                          </svg>
+                        }
+                        label={thinkingLabel(thinkingLevel)}
+                      />
                       {isThinkingMenuOpen && (
                         <div className="absolute bottom-full left-0 z-[200] mb-2 min-w-[10rem] overflow-hidden rounded-xl border border-neutral-200 bg-white p-1 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-150 dark:border-neutral-700 dark:bg-neutral-900">
                           {([
