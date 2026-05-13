@@ -2628,7 +2628,7 @@ function ChatComposerComponent({
                 {/* Vertical divider between input affordances and chips — oc-webui parity */}
                 <div
                   aria-hidden="true"
-                  className="mx-1 h-5 w-px shrink-0 bg-primary-200/60 dark:bg-primary-700/60"
+                  className="mx-2 h-5 w-px shrink-0 bg-primary-300 dark:bg-primary-600/80"
                 />
                 {hasDraft && !isLoading && (
                   <PromptInputAction tooltip="Clear draft">
@@ -2736,7 +2736,7 @@ function ChatComposerComponent({
                           setIsModelMenuOpen(false)
                         }}
                         disabled={disabled || workspaceSelectMutation.isPending}
-                        className="inline-flex h-8 max-w-[10rem] items-center gap-1.5 rounded-full bg-primary-100/70 px-2.5 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-200/80 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-primary-800/60"
+                        className="inline-flex h-8 max-w-[10rem] items-center gap-1.5 rounded-full border border-primary-200/80 dark:border-primary-700/80 bg-transparent px-3 text-xs font-medium text-primary-700 dark:text-primary-200 transition-colors hover:bg-primary-100/60 dark:hover:bg-primary-800/40 disabled:cursor-not-allowed disabled:opacity-50"
                         title={
                           workspaceContextQuery.data?.path
                             ? `${workspaceContextQuery.data.folderName ?? 'Workspace'} · ${workspaceContextQuery.data.path}`
