@@ -11,6 +11,7 @@ import {
   CommandLineIcon,
   File01Icon,
   McpServerIcon,
+  PaintBrush01Icon,
   PuzzleIcon,
   Settings01Icon,
 } from '@hugeicons/core-free-icons'
@@ -184,6 +185,15 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
         shortcut: 'Go',
         icon: File01Icon,
         onSelect: () => void navigate({ to: '/files' }),
+      },
+      {
+        id: 'screen-design',
+        group: 'Screens',
+        label: 'Design',
+        keywords: 'open-design artifacts palette deck poster brand',
+        shortcut: 'Go',
+        icon: PaintBrush01Icon,
+        onSelect: () => void navigate({ to: '/design' }),
       },
       {
         id: 'screen-terminal',

@@ -11,6 +11,7 @@ import {
   File01Icon,
   McpServerIcon,
   Menu01Icon,
+  PaintBrush01Icon,
   PuzzleIcon,
   Rocket01Icon,
   Settings01Icon,
@@ -75,6 +76,13 @@ export const MOBILE_HAMBURGER_NAV_ITEMS = [
     icon: UserGroupIcon,
     to: '/swarm',
     match: (p: string) => p === '/swarm' || p.startsWith('/swarm2'),
+  },
+  {
+    id: 'design',
+    label: 'Design',
+    icon: PaintBrush01Icon,
+    to: '/design',
+    match: (p: string) => p.startsWith('/design'),
   },
 
   {

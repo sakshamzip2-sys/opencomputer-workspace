@@ -8,6 +8,7 @@ import {
   McpServerIcon,
   MessageMultiple01Icon,
   Moon02Icon,
+  PaintBrush01Icon,
   PuzzleIcon,
   Settings01Icon,
   Sun02Icon,
@@ -31,6 +32,7 @@ const SYSTEM_ITEMS: Array<OverflowItem> = [
 
 const CLAUDE_ITEMS: Array<OverflowItem> = [
   { icon: MessageMultiple01Icon, label: 'Chat', to: '/chat' },
+  { icon: PaintBrush01Icon, label: 'Design', to: '/design' },
   { icon: PuzzleIcon, label: 'Skills', to: '/skills' },
   { icon: McpServerIcon, label: 'MCP', to: '/mcp' },
   { icon: UserGroupIcon, label: 'Profiles', to: '/profiles' },
