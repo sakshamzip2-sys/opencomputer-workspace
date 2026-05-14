@@ -20,17 +20,42 @@ describe('ChatComposer context controls', () => {
   it('surfaces workspace and reasoning controls next to the model picker', () => {
     const src = source()
 
-    // Workspace chip — renders inline (Hermes-parity), not behind a hamburger
+    // Workspace group — files-toggle btn + workspace chip (Hermes parity)
     expect(src).toContain("fetch('/api/workspace')")
     expect(src).toContain('workspaceContextQuery')
     expect(src).toContain('workspaceSelectMutation')
     expect(src).toMatch(/workspaceContextQuery\.data\?\.workspaces[^)]*\)\.map/)
     expect(src).toContain('SEARCH_MODAL_EVENTS.TOGGLE_FILE_EXPLORER')
-    // Reasoning chip — preserved
+    expect(src).toContain('aria-label="Toggle workspace files panel"')
+    // Reasoning chip — preserved, now conditional
     expect(src).toContain('Reasoning effort')
     expect(src).toContain("['medium', 'Medium']")
     expect(src).toContain("['high', 'High']")
+    // Gating now reads provider-capability flag (supportsReasoning).
+    // Heuristic isClaude46Model kept as fallback when /api/model/info has no
+    // capability metadata (vanilla hermes-agent without enhanced-fork).
+    expect(src).toMatch(/thinkingLevel !== 'off' \|\| supportsReasoning/)
+    expect(src).toContain('supports_reasoning')
     // Chips are NOT nested under a controls hamburger anymore
     expect(src).not.toContain('isControlsMenuOpen')
+  })
+
+  it('surfaces the toolsets chip with apply/clear actions (#493 parity)', () => {
+    const src = source()
+
+    expect(src).toContain('useSessionToolsetsStore')
+    expect(src).toContain('Session toolsets')
+    expect(src).toContain('handleApplyToolsets')
+    expect(src).toContain('handleClearToolsets')
+    expect(src).toContain('toolsetsMenuRef')
+    expect(src).toContain('Clear (global)')
+    expect(src).toContain('global default')
+    expect(src).toContain('persistedSessionToolsets')
+  })
+
+  it('adds a composer divider between icon controls and chip strip', () => {
+    const src = source()
+    expect(src).toContain('Composer divider')
+    expect(src).toContain('aria-hidden="true"')
   })
 })

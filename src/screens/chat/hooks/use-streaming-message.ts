@@ -791,6 +791,7 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
       attachments?: Array<ChatAttachment>
       idempotencyKey?: string
       model?: string
+      enabledToolsets?: ReadonlyArray<string>
     }) => {
       if (eventSourceRef.current) {
         // Preserve in-progress response as a partial message before aborting
@@ -859,6 +860,14 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
             attachments: params.attachments,
             idempotencyKey: params.idempotencyKey ?? crypto.randomUUID(),
             model: params.model || undefined,
+            // Per-session toolset override (Hermes #493 parity). When the
+            // composer toolsets chip narrows the active list to a non-empty
+            // subset, pass it through so the gateway runs this turn under
+            // the override instead of the global toolset config.
+            enabled_toolsets:
+              params.enabledToolsets && params.enabledToolsets.length > 0
+                ? Array.from(params.enabledToolsets)
+                : undefined,
             locale:
               typeof window !== 'undefined'
                 ? localStorage.getItem('hermes-workspace-locale') || 'en'

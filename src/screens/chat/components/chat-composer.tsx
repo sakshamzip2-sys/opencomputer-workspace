@@ -45,7 +45,9 @@ import { useSettings } from '@/hooks/use-settings'
 import { MOBILE_TAB_BAR_OFFSET } from '@/components/mobile-tab-bar'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useSessionModelStore } from '@/stores/session-model-store'
+import { useSessionToolsetsStore } from '@/stores/session-toolsets-store'
 import { Button } from '@/components/ui/button'
+import { ComposerChip } from '@/components/composer-chip'
 import { usePinnedModels } from '@/hooks/use-pinned-models'
 // import { ModeSelector } from '@/components/mode-selector'
 import { cn } from '@/lib/utils'
@@ -115,10 +117,19 @@ function nextThinkingLevel(level: ThinkingLevel): ThinkingLevel {
   return 'off'
 }
 
-/** Returns true if the model id suggests Claude 4.6 (should default to adaptive) */
+/** Returns true if the model id suggests Claude 4.6+ (4-6, 4-7, 4-8, …).
+ * Used as a fallback when the provider-capability flag is unavailable
+ * (vanilla hermes-agent without enhanced-fork returns raw=null on
+ * /api/model/info). Match the family pattern so newer Opus/Sonnet/Haiku
+ * variants (4-7, 4-8, …) are also gated as reasoning-capable.
+ */
 function isClaude46Model(model: string): boolean {
   const normalized = model.toLowerCase()
-  return normalized.includes('4-6') || normalized.includes('claude-4.6')
+  if (normalized.includes('claude-4.6')) return true
+  // Match the "4-N" / "4.N" family for N >= 6 so 4-7, 4-8, … all qualify.
+  const m = normalized.match(/(?:claude[-/])?(?:opus|sonnet|haiku)?[-/]?4[-.](\d+)/)
+  if (m && Number(m[1]) >= 6) return true
+  return false
 }
 
 type SessionStatusApiResponse = {
@@ -163,6 +174,11 @@ type ModelInfoApiResponse = {
   gatewayMode?: string | null
   supportsRuntimeSwitching?: boolean | null
   vanillaAgent?: boolean | null
+  // The full upstream model-info payload — surfaces capability flags like
+  // capabilities.supports_reasoning so we can gate UI on real provider
+  // signals instead of model-name string matches. See
+  // src/lib/model-info.ts for the normalize step that carries this through.
+  raw?: Record<string, unknown> | null
 }
 
 type ModelSwitchNotice = {
@@ -836,6 +852,8 @@ function ChatComposerComponent({
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false)
   const [isThinkingMenuOpen, setIsThinkingMenuOpen] = useState(false)
+  const [isToolsetsMenuOpen, setIsToolsetsMenuOpen] = useState(false)
+  const [toolsetsDraft, setToolsetsDraft] = useState('')
   const [isProviderSwitcherExpanded, setIsProviderSwitcherExpanded] =
     useState(false)
   const [isMobileActionsMenuOpen, setIsMobileActionsMenuOpen] = useState(false)
@@ -869,6 +887,7 @@ function ChatComposerComponent({
   const modelSelectorRef = useRef<HTMLDivElement | null>(null)
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null)
   const thinkingMenuRef = useRef<HTMLDivElement | null>(null)
+  const toolsetsMenuRef = useRef<HTMLDivElement | null>(null)
   const composerWrapperRef = useRef<HTMLDivElement | null>(null)
   const focusFrameRef = useRef<number | null>(null)
 
@@ -940,7 +959,6 @@ function ChatComposerComponent({
     () => getZeroForkModelInfoFlags(modelInfoQuery.data),
     [modelInfoQuery.data],
   )
-
   const profilesQuery = useQuery({
     queryKey: ['profiles', 'composer'],
     queryFn: fetchProfiles,
@@ -952,6 +970,30 @@ function ChatComposerComponent({
     queryFn: fetchWorkspaceContext,
     retry: false,
     staleTime: 30_000,
+  })
+  // Available toolsets list — populates the checkbox UI in the toolsets chip
+  // dropdown. Backed by OC dashboard's /api/v1/tools/toolsets (proxied via
+  // claude-proxy). On failure, dropdown falls back to a freetext input.
+  const toolsetsCatalogQuery = useQuery({
+    queryKey: ['toolsets', 'catalog'],
+    queryFn: async (): Promise<Array<string>> => {
+      try {
+        const res = await fetch('/api/claude-proxy/api/v1/tools/toolsets')
+        if (!res.ok) return []
+        const data = (await res.json()) as {
+          items?: Array<{ name?: string }>
+        }
+        return Array.isArray(data?.items)
+          ? data.items
+              .map((i) => (typeof i?.name === 'string' ? i.name : ''))
+              .filter((n) => n.length > 0)
+          : []
+      } catch {
+        return []
+      }
+    },
+    retry: false,
+    staleTime: 60_000,
   })
   const profileActivateMutation = useMutation({
     mutationFn: activateProfile,
@@ -1009,6 +1051,20 @@ function ChatComposerComponent({
     s.getModel(sessionKey),
   )
   const setPersistedSessionModel = useSessionModelStore((s) => s.setModel)
+
+  // Per-session toolset override (#493 Hermes parity).
+  // Wire: chip <-> Zustand+localStorage store (this hook) <-> chat-screen
+  // reads the store at send-time and passes enabledToolsets to
+  // startStreaming, which forwards it as `enabled_toolsets` in the
+  // /api/send-stream body. Schema matches opencomputer/dashboard/
+  // routes/cron.py. Backend enforcement is upstream-dependent: the
+  // OC native gateway honors enabled_toolsets; pure OpenAI-compat
+  // upstreams will silently ignore the field.
+  const persistedSessionToolsets = useSessionToolsetsStore((s) =>
+    s.getToolsets(sessionKey),
+  )
+  const setPersistedSessionToolsets = useSessionToolsetsStore((s) => s.setToolsets)
+  const clearPersistedSessionToolsets = useSessionToolsetsStore((s) => s.clearToolsets)
 
   // Model switching is now per-session via the persistent store above.
   // Previously this issued a PATCH /api/hermes-proxy/api/config to write to
@@ -1069,6 +1125,56 @@ function ChatComposerComponent({
     emitSearchModalEvent(SEARCH_MODAL_EVENTS.TOGGLE_FILE_EXPLORER)
   }, [])
 
+  const toolsetsLabel = useMemo(() => {
+    if (!persistedSessionToolsets || persistedSessionToolsets.length === 0) {
+      return 'Default'
+    }
+    if (persistedSessionToolsets.length === 1) return persistedSessionToolsets[0]
+    return `${persistedSessionToolsets[0]} +${persistedSessionToolsets.length - 1}`
+  }, [persistedSessionToolsets])
+
+  const openToolsetsMenu = useCallback(() => {
+    setToolsetsDraft(
+      persistedSessionToolsets && persistedSessionToolsets.length > 0
+        ? persistedSessionToolsets.join(', ')
+        : '',
+    )
+    setIsToolsetsMenuOpen(true)
+    setIsProfileMenuOpen(false)
+    setIsWorkspaceMenuOpen(false)
+    setIsModelMenuOpen(false)
+    setIsThinkingMenuOpen(false)
+  }, [persistedSessionToolsets])
+
+  const handleApplyToolsets = useCallback(() => {
+    if (!sessionKey) return
+    const list = toolsetsDraft
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0)
+    if (list.length === 0) {
+      clearPersistedSessionToolsets(sessionKey)
+      toast('Toolsets cleared — using global default')
+    } else {
+      setPersistedSessionToolsets(sessionKey, list)
+      toast(`Toolsets: ${list.join(', ')}`)
+    }
+    setIsToolsetsMenuOpen(false)
+  }, [
+    sessionKey,
+    toolsetsDraft,
+    setPersistedSessionToolsets,
+    clearPersistedSessionToolsets,
+  ])
+
+  const handleClearToolsets = useCallback(() => {
+    if (!sessionKey) return
+    clearPersistedSessionToolsets(sessionKey)
+    setToolsetsDraft('')
+    setIsToolsetsMenuOpen(false)
+    toast('Toolsets cleared — using global default')
+  }, [sessionKey, clearPersistedSessionToolsets])
+
   const activeProfileName =
     profilesQuery.data?.activeProfile ||
     profilesQuery.data?.profiles?.find((profile) => profile.active)?.name ||
@@ -1088,8 +1194,24 @@ function ChatComposerComponent({
     'Workspace'
 
   const currentModel = currentModelQuery.data ?? ''
+  // Real provider-capability flag for reasoning support. Reads
+  // raw.capabilities.supports_reasoning from the normalized /api/model/info
+  // response. Falls back to the legacy isClaude46Model heuristic only when
+  // the upstream payload does not include capability metadata (e.g. vanilla
+  // hermes-agent without enhanced-fork).
+  const supportsReasoning = useMemo<boolean>(() => {
+    const raw = modelInfoQuery.data?.raw
+    if (raw && typeof raw === 'object') {
+      const caps = (raw as Record<string, unknown>).capabilities
+      if (caps && typeof caps === 'object') {
+        const flag = (caps as Record<string, unknown>).supports_reasoning
+        if (typeof flag === 'boolean') return flag
+      }
+    }
+    return isClaude46Model(currentModel)
+  }, [modelInfoQuery.data, currentModel])
 
-  // Auto-switch to hermes-agent model on mount (Hermes Workspace uses Hermes Agent)
+  // Auto-switch to hermes-agent model on mount (OpenComputer uses Hermes Agent)
   // Removed: auto-switch to hermes-agent. The workspace respects the
   // model/provider configured in ~/.hermes/config.yaml. Users switch
   // via the model selector or Settings page.
@@ -1239,7 +1361,8 @@ function ChatComposerComponent({
       !isModelMenuOpen &&
       !isProfileMenuOpen &&
       !isWorkspaceMenuOpen &&
-      !isThinkingMenuOpen
+      !isThinkingMenuOpen &&
+      !isToolsetsMenuOpen
     )
       return
     function handleOutsideClick(event: MouseEvent) {
@@ -1248,11 +1371,13 @@ function ChatComposerComponent({
       if (profileMenuRef.current?.contains(target)) return
       if (workspaceMenuRef.current?.contains(target)) return
       if (thinkingMenuRef.current?.contains(target)) return
+      if (toolsetsMenuRef.current?.contains(target)) return
       setIsModelMenuOpen(false)
       setIsProviderSwitcherExpanded(false)
       setIsProfileMenuOpen(false)
       setIsWorkspaceMenuOpen(false)
       setIsThinkingMenuOpen(false)
+      setIsToolsetsMenuOpen(false)
     }
 
     document.addEventListener('mousedown', handleOutsideClick)
@@ -1264,6 +1389,7 @@ function ChatComposerComponent({
     isProfileMenuOpen,
     isWorkspaceMenuOpen,
     isThinkingMenuOpen,
+    isToolsetsMenuOpen,
   ])
 
   const persistDraft = useCallback(
@@ -2552,7 +2678,7 @@ function ChatComposerComponent({
               className="min-h-[44px]"
             />
             <PromptInputActions className="justify-between px-1.5 md:px-3 gap-0.5 md:gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-0 md:gap-1">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-y-1 gap-x-0 md:gap-x-1">
                 <PromptInputAction tooltip="Add attachment">
                   <Button
                     size="icon-sm"
@@ -2569,67 +2695,6 @@ function ChatComposerComponent({
                     />
                   </Button>
                 </PromptInputAction>
-                {voiceInput.isSupported || voiceRecorder.isSupported ? (
-                  <PromptInputAction
-                    tooltip={
-                      voiceRecorder.isRecording
-                        ? `Recording… ${Math.round(voiceRecorder.durationMs / 1000)}s`
-                        : voiceInput.isListening
-                          ? 'Listening — tap to stop'
-                          : 'Tap: dictate · Hold: voice note'
-                    }
-                  >
-                    <Button
-                      onClick={() => {
-                        if (voiceInput.isListening) {
-                          voiceInput.stop()
-                        } else if (voiceRecorder.isRecording) {
-                          voiceRecorder.stop()
-                        } else {
-                          voiceInput.start()
-                        }
-                      }}
-                      onPointerDown={handleMicPointerDown}
-                      onPointerUp={handleMicPointerUp}
-                      onPointerLeave={handleMicPointerUp}
-                      size="icon-sm"
-                      variant="ghost"
-                      className={cn(
-                        'rounded-lg transition-colors select-none relative',
-                        voiceRecorder.isRecording
-                          ? 'text-red-600 bg-red-100 hover:bg-red-200 animate-pulse'
-                          : voiceInput.isListening
-                            ? 'text-red-500 bg-red-50 hover:bg-red-100 animate-pulse'
-                            : 'text-primary-500 hover:bg-primary-100 dark:hover:bg-primary-800 hover:text-primary-700',
-                      )}
-                      aria-label={
-                        voiceRecorder.isRecording
-                          ? 'Recording voice note'
-                          : voiceInput.isListening
-                            ? 'Stop listening'
-                            : 'Voice input'
-                      }
-                      disabled={disabled}
-                    >
-                      <HugeiconsIcon
-                        icon={Mic01Icon}
-                        size={20}
-                        strokeWidth={1.5}
-                      />
-                      {voiceRecorder.isRecording ? (
-                        <span className="absolute -top-1 -right-1 flex size-3">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                          <span className="relative inline-flex size-3 rounded-full bg-red-500" />
-                        </span>
-                      ) : null}
-                    </Button>
-                  </PromptInputAction>
-                ) : null}
-                {/* Vertical divider between input affordances and chips — oc-webui parity */}
-                <div
-                  aria-hidden="true"
-                  className="mx-2 h-5 w-px shrink-0 bg-primary-300 dark:bg-primary-600/80"
-                />
                 {hasDraft && !isLoading && (
                   <PromptInputAction tooltip="Clear draft">
                     <Button
@@ -2656,34 +2721,40 @@ function ChatComposerComponent({
 
                 {!hideModelSelector ? (
                   <>
+                    {/* Composer divider — Hermes parity (separates icon controls from chip strip) */}
+                    <div
+                      className="mx-1 hidden h-5 w-px self-center bg-primary-200/60 dark:bg-primary-700/40 md:block"
+                      aria-hidden="true"
+                    />
                     {/* Profile chip — hoisted inline (Hermes parity) */}
                     <div
                       className="relative ml-0.5 flex min-w-0 items-center"
                       ref={profileMenuRef}
                     >
-                      <button
-                        type="button"
+                      <ComposerChip
+                        maxWidthClass="max-w-[8rem]"
+                        ariaExpanded={isProfileMenuOpen}
                         onClick={() => {
                           setIsProfileMenuOpen((open) => !open)
                           setIsWorkspaceMenuOpen(false)
                           setIsThinkingMenuOpen(false)
                           setIsModelMenuOpen(false)
+                          setIsToolsetsMenuOpen(false)
                         }}
                         disabled={disabled || profileActivateMutation.isPending}
-                        className="theme-accent-text inline-flex h-8 max-w-[8rem] items-center gap-1.5 rounded-full bg-primary-100/70 px-2.5 text-xs font-semibold transition-colors hover:bg-primary-200/80 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-primary-800/60"
                         title={
                           activeProfile
                             ? `${activeProfile.name}${profileMeta(activeProfile) ? ` · ${profileMeta(activeProfile)}` : ''}`
                             : activeProfileName
                         }
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                          <circle cx="12" cy="7" r="4" />
-                        </svg>
-                        <span className="truncate">{activeProfileName}</span>
-                        <HugeiconsIcon icon={ArrowDown01Icon} size={11} />
-                      </button>
+                        icon={
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                          </svg>
+                        }
+                        label={activeProfileName}
+                      />
                       {isProfileMenuOpen && (
                         <div className="absolute bottom-full left-0 z-[200] mb-2 min-w-[14rem] overflow-hidden rounded-xl border border-neutral-200 bg-white p-1 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-150 dark:border-neutral-700 dark:bg-neutral-900">
                           <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
@@ -2722,33 +2793,50 @@ function ChatComposerComponent({
                       )}
                     </div>
 
-                    {/* Workspace (home) chip — Hermes parity, NEW */}
+                    {/* Workspace group — files-toggle btn (left) + workspace chip (right) */}
                     <div
                       className="relative flex min-w-0 items-center"
                       ref={workspaceMenuRef}
                     >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsWorkspaceMenuOpen((open) => !open)
-                          setIsProfileMenuOpen(false)
-                          setIsThinkingMenuOpen(false)
-                          setIsModelMenuOpen(false)
-                        }}
-                        disabled={disabled || workspaceSelectMutation.isPending}
-                        className="inline-flex h-8 max-w-[10rem] items-center gap-1.5 rounded-full border border-primary-200/80 dark:border-primary-700/80 bg-transparent px-3 text-xs font-medium text-primary-700 dark:text-primary-200 transition-colors hover:bg-primary-100/60 dark:hover:bg-primary-800/40 disabled:cursor-not-allowed disabled:opacity-50"
-                        title={
-                          workspaceContextQuery.data?.path
-                            ? `${workspaceContextQuery.data.folderName ?? 'Workspace'} · ${workspaceContextQuery.data.path}`
-                            : 'Switch workspace'
-                        }
+                      <div
+                        role="group"
+                        aria-label="Workspace controls"
+                        className="inline-flex h-8 items-stretch overflow-hidden rounded-full bg-primary-100/70 transition-colors hover:bg-primary-200/80 dark:hover:bg-primary-800/60"
                       >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                        </svg>
-                        <span className="truncate">{workspaceContextQuery.data?.folderName ?? 'Home'}</span>
-                        <HugeiconsIcon icon={ArrowDown01Icon} size={11} />
-                      </button>
+                        <button
+                          type="button"
+                          onClick={handleOpenWorkspaceManager}
+                          disabled={disabled}
+                          className="inline-flex items-center justify-center px-2.5 text-primary-600 transition-colors hover:text-primary-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-primary-400"
+                          title="Toggle workspace files panel"
+                          aria-label="Toggle workspace files panel"
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                          </svg>
+                        </button>
+                        <div className="w-px self-stretch bg-primary-200/60 dark:bg-primary-700/40" aria-hidden="true" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsWorkspaceMenuOpen((open) => !open)
+                            setIsProfileMenuOpen(false)
+                            setIsThinkingMenuOpen(false)
+                            setIsModelMenuOpen(false)
+                            setIsToolsetsMenuOpen(false)
+                          }}
+                          disabled={disabled || workspaceSelectMutation.isPending}
+                          className="inline-flex max-w-[10rem] items-center gap-1.5 px-2.5 text-xs font-medium text-primary-600 transition-colors hover:text-primary-900 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={
+                            workspaceContextQuery.data?.path
+                              ? `${workspaceContextQuery.data.folderName ?? 'Workspace'} · ${workspaceContextQuery.data.path}`
+                              : 'Switch workspace'
+                          }
+                        >
+                          <span className="truncate">{workspaceContextQuery.data?.folderName ?? 'Home'}</span>
+                          <HugeiconsIcon icon={ArrowDown01Icon} size={11} />
+                        </button>
+                      </div>
                       {isWorkspaceMenuOpen && (
                         <div className="absolute bottom-full left-0 z-[200] mb-2 min-w-[16rem] max-w-[22rem] overflow-hidden rounded-xl border border-neutral-200 bg-white p-1 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-150 dark:border-neutral-700 dark:bg-neutral-900">
                           <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
@@ -2814,29 +2902,30 @@ function ChatComposerComponent({
                       className="relative flex min-w-0 items-center"
                       ref={modelSelectorRef}
                     >
-                      <button
-                        type="button"
+                      <ComposerChip
+                        maxWidthClass="max-w-[12rem]"
+                        ariaExpanded={isModelMenuOpen}
                         onClick={() => {
                           setIsModelMenuOpen((prev) => !prev)
                           setIsProfileMenuOpen(false)
                           setIsWorkspaceMenuOpen(false)
                           setIsThinkingMenuOpen(false)
+                          setIsToolsetsMenuOpen(false)
                         }}
                         disabled={isModelSwitcherDisabled}
-                        className="inline-flex h-8 max-w-[12rem] items-center gap-1.5 rounded-full bg-primary-100/70 px-2.5 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-200/80 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-primary-800/60"
                         title={modelButtonLabel}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <rect x="4" y="4" width="16" height="16" rx="2" />
-                          <rect x="9" y="9" width="6" height="6" />
-                          <path d="M15 2v2" /><path d="M15 20v2" />
-                          <path d="M2 15h2" /><path d="M2 9h2" />
-                          <path d="M20 15h2" /><path d="M20 9h2" />
-                          <path d="M9 2v2" /><path d="M9 20v2" />
-                        </svg>
-                        <span className="truncate">{modelButtonLabel}</span>
-                        <HugeiconsIcon icon={ArrowDown01Icon} size={11} />
-                      </button>
+                        icon={
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <rect x="4" y="4" width="16" height="16" rx="2" />
+                            <rect x="9" y="9" width="6" height="6" />
+                            <path d="M15 2v2" /><path d="M15 20v2" />
+                            <path d="M2 15h2" /><path d="M2 9h2" />
+                            <path d="M20 15h2" /><path d="M20 9h2" />
+                            <path d="M9 2v2" /><path d="M9 20v2" />
+                          </svg>
+                        }
+                        label={modelButtonLabel}
+                      />
                       {isModelMenuOpen && !isMobileViewport && (
                         <>
                           <div className="fixed inset-0 z-[199]" onClick={() => setIsModelMenuOpen(false)} />
@@ -2931,32 +3020,168 @@ function ChatComposerComponent({
                       )}
                     </div>
 
-                    {/* Reasoning (mode) chip — hoisted inline */}
+                    {/* Toolsets chip — Hermes parity (real 4th chip from webui) */}
+                    <div
+                      className="relative flex min-w-0 items-center"
+                      ref={toolsetsMenuRef}
+                    >
+                      <ComposerChip
+                        maxWidthClass="max-w-[10rem]"
+                        ariaExpanded={isToolsetsMenuOpen}
+                        onClick={() =>
+                          isToolsetsMenuOpen
+                            ? setIsToolsetsMenuOpen(false)
+                            : openToolsetsMenu()
+                        }
+                        disabled={disabled || !sessionKey}
+                        active={
+                          !!(persistedSessionToolsets &&
+                          persistedSessionToolsets.length > 0)
+                        }
+                        title={
+                          persistedSessionToolsets &&
+                          persistedSessionToolsets.length > 0
+                            ? `Session toolsets: ${persistedSessionToolsets.join(', ')}`
+                            : 'Session toolsets (global default)'
+                        }
+                        icon={
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                          </svg>
+                        }
+                        label={toolsetsLabel}
+                      />
+                      {isToolsetsMenuOpen && (
+                        <div className="absolute bottom-full left-0 z-[200] mb-2 w-72 overflow-hidden rounded-xl border border-neutral-200 bg-white p-3 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-150 dark:border-neutral-700 dark:bg-neutral-900">
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+                            Session toolsets
+                          </div>
+                          <div className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+                            Override active toolsets for this session only.
+                            Leave empty for the global default.
+                          </div>
+                          <div className="mt-2 text-[11px] font-medium text-neutral-600 dark:text-neutral-300">
+                            {persistedSessionToolsets &&
+                            persistedSessionToolsets.length > 0
+                              ? `Active: ${persistedSessionToolsets.join(', ')}`
+                              : 'Active: global default'}
+                          </div>
+                          {(() => {
+                            const catalog = toolsetsCatalogQuery.data ?? []
+                            // Draft → set of names (case-insensitive), drives checkbox state
+                            const draftSet = new Set(
+                              toolsetsDraft
+                                .split(',')
+                                .map((t) => t.trim())
+                                .filter((t) => t.length > 0),
+                            )
+                            const toggleName = (name: string) => {
+                              const next = new Set(draftSet)
+                              if (next.has(name)) {
+                                next.delete(name)
+                              } else {
+                                next.add(name)
+                              }
+                              setToolsetsDraft(Array.from(next).join(', '))
+                            }
+                            if (toolsetsCatalogQuery.isLoading) {
+                              return (
+                                <div className="mt-2 text-[11px] italic text-neutral-400">
+                                  Loading toolsets…
+                                </div>
+                              )
+                            }
+                            if (catalog.length === 0) {
+                              // Backend not reachable — fall back to freetext
+                              return (
+                                <input
+                                  type="text"
+                                  value={toolsetsDraft}
+                                  onChange={(e) => setToolsetsDraft(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault()
+                                      handleApplyToolsets()
+                                    } else if (e.key === 'Escape') {
+                                      setIsToolsetsMenuOpen(false)
+                                    }
+                                  }}
+                                  placeholder="e.g. coding, browse, mcp"
+                                  className="mt-2 w-full rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-xs text-neutral-900 placeholder:text-neutral-400 focus:border-accent-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                                />
+                              )
+                            }
+                            return (
+                              <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-800">
+                                {catalog.map((name) => {
+                                  const checked = draftSet.has(name)
+                                  return (
+                                    <label
+                                      key={name}
+                                      className="flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-xs text-neutral-700 transition-colors hover:bg-neutral-50 dark:text-neutral-200 dark:hover:bg-neutral-700/40"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => toggleName(name)}
+                                        className="size-3.5 rounded border-neutral-300 text-accent-500 focus:ring-accent-500 dark:border-neutral-600"
+                                      />
+                                      <span className="truncate">{name}</span>
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            )
+                          })()}
+                          <div className="mt-2 flex justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={handleClearToolsets}
+                              className="rounded-md px-2 py-1 text-[11px] font-medium text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                            >
+                              Clear (global)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleApplyToolsets}
+                              className="rounded-md bg-accent-500 px-2 py-1 text-[11px] font-medium text-white transition-colors hover:bg-accent-600"
+                            >
+                              Apply
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Reasoning chip — shown only when the active model
+                        actually supports reasoning OR the user has already
+                        set a level. supportsReasoning reads the provider
+                        capability flag from /api/model/info; falls back to
+                        the legacy heuristic if no capability metadata. */}
+                    {(thinkingLevel !== 'off' || supportsReasoning) && (
                     <div
                       className="relative flex min-w-0 items-center"
                       ref={thinkingMenuRef}
                     >
-                      <button
-                        type="button"
+                      <ComposerChip
+                        ariaExpanded={isThinkingMenuOpen}
                         onClick={() => {
                           setIsThinkingMenuOpen((open) => !open)
                           setIsProfileMenuOpen(false)
                           setIsWorkspaceMenuOpen(false)
                           setIsModelMenuOpen(false)
+                          setIsToolsetsMenuOpen(false)
                         }}
-                        className={cn(
-                          'inline-flex h-8 items-center gap-1.5 rounded-full bg-primary-100/70 px-2.5 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-200/80 dark:hover:bg-primary-800/60',
-                          thinkingLevel === 'off' && 'opacity-70',
-                        )}
+                        className={cn(thinkingLevel === 'off' && 'opacity-70')}
                         title={`Reasoning effort: ${thinkingLabel(thinkingLevel)}`}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" />
-                          <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" />
-                        </svg>
-                        <span>{thinkingLabel(thinkingLevel)}</span>
-                        <HugeiconsIcon icon={ArrowDown01Icon} size={11} />
-                      </button>
+                        icon={
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" />
+                            <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" />
+                          </svg>
+                        }
+                        label={thinkingLabel(thinkingLevel)}
+                      />
                       {isThinkingMenuOpen && (
                         <div className="absolute bottom-full left-0 z-[200] mb-2 min-w-[10rem] overflow-hidden rounded-xl border border-neutral-200 bg-white p-1 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-150 dark:border-neutral-700 dark:bg-neutral-900">
                           {([
@@ -2983,24 +3208,81 @@ function ChatComposerComponent({
                         </div>
                       )}
                     </div>
+                    )}
                   </>
                 ) : null}
               </div>
               <div className="ml-1 flex shrink-0 items-center gap-0.5 md:gap-1">
                 <ContextBar compact sessionId={sessionKey} />
+                {voiceInput.isSupported || voiceRecorder.isSupported ? (
+                  <PromptInputAction
+                    tooltip={
+                      voiceRecorder.isRecording
+                        ? `Recording… ${Math.round(voiceRecorder.durationMs / 1000)}s`
+                        : voiceInput.isListening
+                          ? 'Listening — tap to stop'
+                          : 'Tap: dictate · Hold: voice note'
+                    }
+                  >
+                    <Button
+                      onClick={() => {
+                        if (voiceInput.isListening) {
+                          voiceInput.stop()
+                        } else if (voiceRecorder.isRecording) {
+                          voiceRecorder.stop()
+                        } else {
+                          voiceInput.start()
+                        }
+                      }}
+                      onPointerDown={handleMicPointerDown}
+                      onPointerUp={handleMicPointerUp}
+                      onPointerLeave={handleMicPointerUp}
+                      size="icon-sm"
+                      variant="ghost"
+                      className={cn(
+                        'rounded-lg transition-colors select-none',
+                        voiceRecorder.isRecording
+                          ? 'text-red-600 bg-red-100 hover:bg-red-200 animate-pulse'
+                          : voiceInput.isListening
+                            ? 'text-red-500 bg-red-50 hover:bg-red-100 animate-pulse'
+                            : 'text-primary-500 hover:bg-primary-100 dark:hover:bg-primary-800 hover:text-primary-700',
+                      )}
+                      aria-label={
+                        voiceRecorder.isRecording
+                          ? 'Recording voice note'
+                          : voiceInput.isListening
+                            ? 'Stop listening'
+                            : 'Voice input'
+                      }
+                      disabled={disabled}
+                    >
+                      <HugeiconsIcon
+                        icon={Mic01Icon}
+                        size={20}
+                        strokeWidth={1.5}
+                      />
+                      {voiceRecorder.isRecording ? (
+                        <span className="absolute -top-1 -right-1 flex size-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                          <span className="relative inline-flex size-3 rounded-full bg-red-500" />
+                        </span>
+                      ) : null}
+                    </Button>
+                  </PromptInputAction>
+                ) : null}
                 {isLoading ? (
                   <PromptInputAction tooltip="Stop generation">
                     <Button
                       onClick={handleAbort}
                       size="icon-sm"
                       variant="destructive"
-                      className="size-9 rounded-full bg-red-500 text-white shadow-md shadow-red-500/30 hover:bg-red-600 hover:scale-110 active:scale-95"
+                      className="rounded-md"
                       aria-label="Stop generation"
                     >
                       <HugeiconsIcon
                         icon={StopIcon}
-                        size={18}
-                        strokeWidth={2}
+                        size={20}
+                        strokeWidth={1.5}
                       />
                     </Button>
                   </PromptInputAction>
