@@ -154,8 +154,16 @@ function effectiveProbeTtl(caps: { health: boolean; chatCompletions: boolean }):
   if (caps.health || caps.chatCompletions) return PROBE_TTL_MS
   return PROBE_TTL_DISCONNECTED_MS
 }
+// Matches both the hermes-agent dashboard convention
+// (`window.__CLAUDE_SESSION_TOKEN__ = '<token>'` / `__HERMES_SESSION_TOKEN__`)
+// AND OpenComputer's own dashboard convention
+// (`window.OC_TOKEN = '<token>'.replace(...)`).
+// Without the OC_TOKEN branch the workspace 401s against an OC-served
+// dashboard because the scrape silently returns "no token found" and every
+// authenticated /v1/* call goes out unauthenticated — chat surfaces look
+// connected (health/v1/models are public) but never get a response.
 const DASHBOARD_TOKEN_REGEX =
-  /window\.__(?:CLAUDE|HERMES)_SESSION_TOKEN__\s*=\s*["'](.+?)["']/
+  /window\.(?:__(?:CLAUDE|HERMES)_SESSION_TOKEN__|OC_TOKEN)\s*=\s*["'](.+?)["']/
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -259,7 +267,11 @@ let dashboardTokenPromise: Promise<string> | null = null
 let dashboardTokenCache = ''
 
 /** Optional bearer token for authenticated gateway endpoints. */
-export const BEARER_TOKEN = process.env.HERMES_API_TOKEN || process.env.CLAUDE_API_TOKEN || ''
+export const BEARER_TOKEN =
+  process.env.HERMES_API_TOKEN ||
+  process.env.CLAUDE_API_TOKEN ||
+  process.env.OC_API_TOKEN ||
+  ''
 
 /**
  * Optional explicit bearer token for dashboard API calls.
@@ -277,7 +289,11 @@ export const BEARER_TOKEN = process.env.HERMES_API_TOKEN || process.env.CLAUDE_A
  * CLAUDE_DASHBOARD_TOKEN isn't set, leave this empty and let
  * fetchDashboardToken() fall through to the HTML-scrape legacy path.
  */
-const DASHBOARD_BEARER_TOKEN = process.env.HERMES_DASHBOARD_TOKEN || process.env.CLAUDE_DASHBOARD_TOKEN || ''
+const DASHBOARD_BEARER_TOKEN =
+  process.env.HERMES_DASHBOARD_TOKEN ||
+  process.env.CLAUDE_DASHBOARD_TOKEN ||
+  process.env.OC_DASHBOARD_TOKEN ||
+  ''
 
 function authHeaders(): Record<string, string> {
   return BEARER_TOKEN ? { Authorization: `Bearer ${BEARER_TOKEN}` } : {}

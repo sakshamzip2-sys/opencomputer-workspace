@@ -1,11 +1,11 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearch } from '@tanstack/react-router'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'motion/react'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Add01Icon, CheckListIcon, RefreshIcon } from '@hugeicons/core-free-icons'
+import { Add01Icon, Cancel01Icon, CheckListIcon, MessageMultiple02Icon, RefreshIcon } from '@hugeicons/core-free-icons'
 import { TaskCard } from './task-card'
 import { TaskDialog } from './task-dialog'
 import { toast } from '@/components/ui/toast'
@@ -23,6 +23,31 @@ import {
   isOverdue,
 } from '@/lib/tasks-api'
 import type { ClaudeTask, TaskColumn, CreateTaskInput, TaskAssignee } from '@/lib/tasks-api'
+
+const ChatScreen = lazy(() =>
+  import('@/screens/chat/chat-screen').then((m) => ({ default: m.ChatScreen })),
+)
+
+const TASKS_CHAT_OPEN_STORAGE_KEY = 'tasks:chat-panel-open'
+
+function loadChatPanelOpen(): boolean {
+  if (typeof window === 'undefined') return true
+  try {
+    const stored = window.localStorage.getItem(TASKS_CHAT_OPEN_STORAGE_KEY)
+    return stored === null ? true : stored === '1'
+  } catch {
+    return true
+  }
+}
+
+function persistChatPanelOpen(open: boolean): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(TASKS_CHAT_OPEN_STORAGE_KEY, open ? '1' : '0')
+  } catch {
+    // storage unavailable — in-memory state still works
+  }
+}
 
 const QUERY_KEY = ['claude', 'tasks'] as const
 const ASSIGNEES_KEY = ['claude', 'tasks', 'assignees'] as const
@@ -52,6 +77,11 @@ export function TasksScreen() {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<TaskColumn | null>(null)
   const [showDone, setShowDone] = useState(false)
+  const [chatOpen, setChatOpen] = useState<boolean>(() => loadChatPanelOpen())
+
+  useEffect(() => {
+    persistChatPanelOpen(chatOpen)
+  }, [chatOpen])
 
   const search = useSearch({ from: '/tasks' })
   const initialAssignee = typeof search.assignee === 'string' ? search.assignee : null
@@ -176,7 +206,8 @@ export function TasksScreen() {
   const colMaxWidth = Math.floor(1200 / visibleColumns.length)
 
   return (
-    <div className="min-h-full overflow-y-auto bg-surface text-ink">
+    <div className="flex min-h-full flex-col bg-surface text-ink lg:flex-row">
+      <div className="flex-1 min-w-0 overflow-y-auto">
       <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-4 py-6 pb-[calc(var(--tabbar-h,80px)+1.5rem)] sm:px-6 lg:px-8">
       {/* Header */}
       <header className="rounded-2xl border border-primary-200 bg-primary-50/85 p-4 backdrop-blur-xl">
@@ -218,6 +249,20 @@ export function TasksScreen() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setChatOpen(v => !v)}
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors',
+              chatOpen
+                ? 'border-[var(--theme-accent)] bg-[var(--theme-hover)] text-[var(--theme-accent)]'
+                : 'border-[var(--theme-border)] text-[var(--theme-muted)] hover:border-[var(--theme-accent)] hover:text-[var(--theme-text)]',
+            )}
+            title={chatOpen ? 'Hide chat' : 'Show chat'}
+            aria-pressed={chatOpen}
+          >
+            <HugeiconsIcon icon={MessageMultiple02Icon} size={14} />
+            <span className="hidden sm:inline">Chat</span>
+          </button>
           <button
             onClick={() => setShowDone(v => !v)}
             className={cn(
@@ -386,6 +431,101 @@ export function TasksScreen() {
         }}
       />
     </div>
+    </div>
+
+    {/* Chat side panel — lg+ persistent, mobile drawer overlay */}
+    {chatOpen && (
+      <>
+        {/* Desktop: side panel docked to the right */}
+        <aside
+          className={cn(
+            'hidden lg:flex lg:w-[420px] xl:w-[460px] lg:flex-col lg:shrink-0',
+            'border-l border-[var(--theme-border)] bg-[var(--theme-card)]',
+            'sticky top-0 max-h-screen min-h-[400px]',
+          )}
+          aria-label="Tasks chat panel"
+        >
+          <div className="flex h-12 items-center justify-between border-b border-[var(--theme-border)] px-3">
+            <div className="flex items-center gap-2">
+              <HugeiconsIcon
+                icon={MessageMultiple02Icon}
+                size={14}
+                className="text-[var(--theme-accent)]"
+              />
+              <span className="text-xs font-medium text-[var(--theme-text)]">Main Agent</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setChatOpen(false)}
+              className="rounded-md p-1 text-[var(--theme-muted)] transition-colors hover:bg-[var(--theme-hover)] hover:text-[var(--theme-text)]"
+              aria-label="Close chat panel"
+              title="Close chat"
+            >
+              <HugeiconsIcon icon={Cancel01Icon} size={14} />
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center text-xs text-[var(--theme-muted)]">
+                  Loading chat…
+                </div>
+              }
+            >
+              <ChatScreen
+                activeFriendlyId="main"
+                compact
+                embedded
+                isNewChat={false}
+              />
+            </Suspense>
+          </div>
+        </aside>
+
+        {/* Mobile: full-screen drawer overlay */}
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-surface lg:hidden"
+          role="dialog"
+          aria-label="Tasks chat"
+        >
+          <div className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--theme-border)] bg-[var(--theme-card)] px-3">
+            <div className="flex items-center gap-2">
+              <HugeiconsIcon
+                icon={MessageMultiple02Icon}
+                size={14}
+                className="text-[var(--theme-accent)]"
+              />
+              <span className="text-xs font-medium text-[var(--theme-text)]">Main Agent</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setChatOpen(false)}
+              className="rounded-md p-1 text-[var(--theme-muted)] transition-colors hover:bg-[var(--theme-hover)] hover:text-[var(--theme-text)]"
+              aria-label="Close chat panel"
+              title="Close chat"
+            >
+              <HugeiconsIcon icon={Cancel01Icon} size={14} />
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center text-xs text-[var(--theme-muted)]">
+                  Loading chat…
+                </div>
+              }
+            >
+              <ChatScreen
+                activeFriendlyId="main"
+                compact
+                embedded
+                isNewChat={false}
+              />
+            </Suspense>
+          </div>
+        </div>
+      </>
+    )}
     </div>
   )
 }

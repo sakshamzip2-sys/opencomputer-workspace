@@ -25,6 +25,7 @@ import { Route as FilesRouteImport } from './routes/files'
 import { Route as DesignRouteImport } from './routes/design'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ConductorRouteImport } from './routes/conductor'
+import { Route as ChatsRouteImport } from './routes/chats'
 import { Route as AgoraRouteImport } from './routes/agora'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as IndexRouteImport } from './routes/index'
@@ -223,6 +224,11 @@ const DashboardRoute = DashboardRouteImport.update({
 const ConductorRoute = ConductorRouteImport.update({
   id: '/conductor',
   path: '/conductor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChatsRoute = ChatsRouteImport.update({
+  id: '/chats',
+  path: '/chats',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgoraRoute = AgoraRouteImport.update({
@@ -828,6 +834,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/agora': typeof AgoraRoute
+  '/chats': typeof ChatsRoute
   '/conductor': typeof ConductorRoute
   '/dashboard': typeof DashboardRoute
   '/design': typeof DesignRoute
@@ -965,6 +972,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/agora': typeof AgoraRoute
+  '/chats': typeof ChatsRoute
   '/conductor': typeof ConductorRoute
   '/dashboard': typeof DashboardRoute
   '/design': typeof DesignRoute
@@ -1102,6 +1110,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/agora': typeof AgoraRoute
+  '/chats': typeof ChatsRoute
   '/conductor': typeof ConductorRoute
   '/dashboard': typeof DashboardRoute
   '/design': typeof DesignRoute
@@ -1241,6 +1250,7 @@ export interface FileRouteTypes {
     | '/'
     | '/$'
     | '/agora'
+    | '/chats'
     | '/conductor'
     | '/dashboard'
     | '/design'
@@ -1378,6 +1388,7 @@ export interface FileRouteTypes {
     | '/'
     | '/$'
     | '/agora'
+    | '/chats'
     | '/conductor'
     | '/dashboard'
     | '/design'
@@ -1514,6 +1525,7 @@ export interface FileRouteTypes {
     | '/'
     | '/$'
     | '/agora'
+    | '/chats'
     | '/conductor'
     | '/dashboard'
     | '/design'
@@ -1652,6 +1664,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SplatRoute: typeof SplatRoute
   AgoraRoute: typeof AgoraRoute
+  ChatsRoute: typeof ChatsRoute
   ConductorRoute: typeof ConductorRoute
   DashboardRoute: typeof DashboardRoute
   DesignRoute: typeof DesignRoute
@@ -1872,6 +1885,13 @@ declare module '@tanstack/react-router' {
       path: '/conductor'
       fullPath: '/conductor'
       preLoaderRoute: typeof ConductorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chats': {
+      id: '/chats'
+      path: '/chats'
+      fullPath: '/chats'
+      preLoaderRoute: typeof ChatsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/agora': {
@@ -2874,6 +2894,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
   AgoraRoute: AgoraRoute,
+  ChatsRoute: ChatsRoute,
   ConductorRoute: ConductorRoute,
   DashboardRoute: DashboardRoute,
   DesignRoute: DesignRoute,

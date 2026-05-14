@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Folder01Icon } from '@hugeicons/core-free-icons'
 import { Button } from '@/components/ui/button'
@@ -136,19 +137,7 @@ function ChatHeaderComponent({
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
-  const [sessionPopoverOpen, setSessionPopoverOpen] = useState(false)
-  const [sessionSearch, setSessionSearch] = useState('')
-  const sessionPopoverRef = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    if (!sessionPopoverOpen) return
-    const handler = (e: MouseEvent) => {
-      if (sessionPopoverRef.current?.contains(e.target as Node)) return
-      setSessionPopoverOpen(false)
-      setSessionSearch('')
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [sessionPopoverOpen])
+  const navigate = useNavigate()
   const [titleDraft, setTitleDraft] = useState(activeTitle)
   const titleInputRef = useRef<HTMLInputElement | null>(null)
   const isSavingTitleRef = useRef(false)
@@ -271,10 +260,13 @@ function ChatHeaderComponent({
             </svg>
           </button>
 
-          {/* Session name — centered pill, tappable */}
+          {/* Session name — centered pill, tappable. Navigate to /chats (the
+              Claude.ai-style full chats list) instead of the old drawer. */}
           <button
             type="button"
-            onClick={onOpenSessions}
+            onClick={() => {
+              void navigate({ to: '/chats' })
+            }}
             className="flex items-center gap-1 min-w-0 max-w-[55vw] px-3 py-1.5 rounded-full bg-primary-100/70 hover:bg-primary-200/80 dark:bg-neutral-700/80 dark:hover:bg-neutral-600/80 transition-colors"
             aria-label="Switch session"
           >
@@ -361,15 +353,14 @@ function ChatHeaderComponent({
               aria-label="Session name"
             />
           ) : (
-            <div
-              className="relative flex items-center gap-1"
-              ref={sessionPopoverRef}
-            >
+            <div className="relative flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => setSessionPopoverOpen((p) => !p)}
+                onClick={() => {
+                  void navigate({ to: '/chats' })
+                }}
                 className="min-w-0 truncate text-sm font-medium text-balance hover:text-accent-600 transition-colors rounded-sm text-left"
-                title="Click to switch session"
+                title="Browse all chats"
               >
                 {activeTitle}
               </button>
@@ -382,105 +373,6 @@ function ChatHeaderComponent({
                 >
                   ✏️
                 </button>
-              )}
-              {sessionPopoverOpen && (
-                <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-80 overflow-hidden rounded-xl border border-[var(--theme-border)] shadow-2xl">
-                  <div
-                    className="border-b px-3 py-2"
-                    style={{
-                      background: 'var(--theme-card)',
-                      borderColor: 'var(--theme-border)',
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <svg
-                        width="13"
-                        height="13"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        className="shrink-0 text-[var(--theme-muted)]"
-                      >
-                        <circle cx="11" cy="11" r="8" />
-                        <path d="m21 21-4.35-4.35" />
-                      </svg>
-                      <input
-                        autoFocus
-                        type="text"
-                        placeholder="Search sessions..."
-                        value={sessionSearch}
-                        onChange={(e) => setSessionSearch(e.target.value)}
-                        className="flex-1 bg-transparent text-sm outline-none"
-                        style={{ color: 'var(--theme-text)' }}
-                      />
-                    </div>
-                  </div>
-                  <div
-                    className="max-h-60 overflow-y-auto p-1"
-                    style={{
-                      background: 'var(--theme-card)',
-                      boxShadow: '0 18px 48px rgba(0,0,0,0.38)',
-                      opacity: 1,
-                    }}
-                  >
-                    {sessions
-                      .filter((s) => {
-                        if (!sessionSearch.trim()) return true
-                        const q = sessionSearch.toLowerCase()
-                        return (
-                          (s.label || s.derivedTitle || s.title || '')
-                            .toLowerCase()
-                            .includes(q) ||
-                          s.friendlyId?.toLowerCase().includes(q)
-                        )
-                      })
-                      .slice(0, 20)
-                      .map((s) => {
-                        const label =
-                          s.label ||
-                          s.derivedTitle ||
-                          s.title ||
-                          s.friendlyId?.slice(0, 8) ||
-                          'Session'
-                        const isActive =
-                          Boolean(activeFriendlyId) &&
-                          (s.friendlyId === activeFriendlyId ||
-                            s.key?.endsWith(`:${activeFriendlyId}`))
-                        return (
-                          <button
-                            key={s.key || s.friendlyId}
-                            type="button"
-                            onClick={() => {
-                              setSessionPopoverOpen(false)
-                              setSessionSearch('')
-                              onSelectSession?.(s.key || s.friendlyId || '')
-                            }}
-                            className={cn(
-                              'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
-                              'border-b border-[var(--theme-border)] last:border-0 hover:bg-[var(--theme-card2)]',
-                              isActive && 'bg-[var(--theme-card2)] font-medium',
-                            )}
-                          >
-                            <span
-                              className="flex-1 min-w-0 truncate"
-                              style={{ color: 'var(--theme-text)' }}
-                            >
-                              {label}
-                            </span>
-                            {isActive && (
-                              <span className="size-1.5 rounded-full bg-accent-500 shrink-0" />
-                            )}
-                          </button>
-                        )
-                      })}
-                    {sessions.length === 0 && (
-                      <p className="px-3 py-4 text-sm text-neutral-400">
-                        No sessions
-                      </p>
-                    )}
-                  </div>
-                </div>
               )}
             </div>
           )}

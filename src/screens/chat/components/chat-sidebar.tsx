@@ -7,6 +7,7 @@ import {
   KanbanSquare,
   LayoutDashboard,
   MessageSquare,
+  MessagesSquare,
   Moon,
   Palette,
   PanelLeftClose,
@@ -624,6 +625,7 @@ function ChatSidebarComponent({
   const isTerminalActive = pathname === '/terminal'
   const isJobsActive = pathname === '/jobs'
   const isMemoryActive = pathname === '/memory'
+  const isChatsActive = pathname === '/chats'
   const isTasksActive = pathname === '/tasks'
   const isConductorActive = pathname === '/conductor'
   const isOperationsActive = pathname === '/operations'
@@ -836,6 +838,13 @@ function ChatSidebarComponent({
       icon: MessageSquare,
       label: t('nav.chat'),
       active: isChatActive,
+    },
+    {
+      kind: 'link',
+      to: '/chats',
+      icon: MessagesSquare,
+      label: 'Chats',
+      active: isChatsActive,
     },
     {
       kind: 'link',

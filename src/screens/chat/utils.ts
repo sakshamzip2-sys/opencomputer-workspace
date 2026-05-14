@@ -54,6 +54,14 @@ function stripChannelPrefix(text: string): string {
 function cleanUserText(raw: string): string {
   let text = raw
 
+  // Strip the <workspace_context active="true" name="…" path="…" /> directive
+  // injected by buildWorkspaceScopedTextMessage before send. The directive is
+  // metadata for the LLM; it must not appear in chat bubbles or session titles.
+  text = text.replace(
+    /<workspace_context\s+active="true"[^>]*\/>\s*/gi,
+    '',
+  )
+
   // Remove "Conversation info (untrusted metadata):" headers + JSON block
   // Format: "Conversation info (untrusted metadata):\n```json\n{...}\n```\n\n"
   text = text.replace(
