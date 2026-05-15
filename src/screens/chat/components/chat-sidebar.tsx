@@ -834,13 +834,6 @@ function ChatSidebarComponent({
     },
     {
       kind: 'link',
-      to: '/chat',
-      icon: MessageSquare,
-      label: t('nav.chat'),
-      active: isChatActive,
-    },
-    {
-      kind: 'link',
       to: '/chats',
       icon: MessagesSquare,
       label: 'Chats',
