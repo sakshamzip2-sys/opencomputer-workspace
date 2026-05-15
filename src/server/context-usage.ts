@@ -42,6 +42,94 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
 
 const CHARS_PER_TOKEN = 3.5
 
+/**
+ * Message shape accepted by the local token estimators. Deliberately loose —
+ * the same function is called from both gateway-shaped payloads (string
+ * `content`) and Anthropic-shaped payloads (structured `content` array).
+ *
+ * `text` is the legacy top-level field some adapters set in parallel with the
+ * structured array; we strip it when it mirrors a content block to avoid
+ * counting the same bytes twice.
+ */
+export type EstimableMessage = {
+  content?: string | Array<{ type?: string; text?: string }>
+  text?: string
+}
+
+/**
+ * Estimate context tokens consumed by a message list by serializing each
+ * message's content. Structured content arrays (Anthropic-style) are walked
+ * block-by-block so tool_result payloads, multi-block text turns, and binary
+ * placeholders all contribute their actual character footprint, rather than
+ * the route handler's old "string length only" approximation that
+ * under-counted by 10-100x on tool-heavy turns.
+ *
+ * The double-count guard: when `message.text` exactly matches a block's text
+ * in the structured array, we drop it (some adapters set both `text` and the
+ * matching `content[].text`, so naive summing inflated the estimate).
+ *
+ * Returns ceil(totalChars / CHARS_PER_TOKEN). Always non-negative.
+ */
+export function estimateContextTokensFromMessages(
+  messages: ReadonlyArray<EstimableMessage>,
+): number {
+  if (!Array.isArray(messages) || messages.length === 0) return 0
+
+  let totalChars = 0
+
+  for (const message of messages) {
+    if (!message || typeof message !== 'object') continue
+
+    let messageChars = 0
+    let structuredTexts: Array<string> = []
+
+    if (typeof message.content === 'string') {
+      messageChars += message.content.length
+    } else if (Array.isArray(message.content)) {
+      for (const block of message.content) {
+        if (!block || typeof block !== 'object') continue
+        const blockText = typeof block.text === 'string' ? block.text : ''
+        if (blockText.length > 0) {
+          messageChars += blockText.length
+          structuredTexts.push(blockText)
+        }
+      }
+    }
+
+    if (typeof message.text === 'string' && message.text.length > 0) {
+      const mirrored = structuredTexts.some((t) => t === message.text)
+      if (!mirrored) {
+        messageChars += message.text.length
+      }
+    }
+
+    totalChars += messageChars
+  }
+
+  if (totalChars <= 0) return 0
+  return Math.ceil(totalChars / CHARS_PER_TOKEN)
+}
+
+/**
+ * Fallback estimator used when we only have a CUMULATIVE cache_read_tokens
+ * total (summed across every assistant turn in the session). To approximate
+ * the current per-turn context size we divide by the number of assistant
+ * turns and apply a 1.2x correction for non-cached prefix tokens.
+ *
+ * This is intentionally a coarse fallback — callers should prefer
+ * `estimateContextTokensFromMessages` when they have the actual message
+ * payloads. Returns 0 when inputs are unusable rather than throwing, so
+ * surface code can degrade gracefully.
+ */
+export function estimateContextTokensFromCacheRead(
+  cumulativeCacheReadTokens: number,
+  assistantTurns: number,
+): number {
+  if (!Number.isFinite(cumulativeCacheReadTokens) || cumulativeCacheReadTokens <= 0) return 0
+  if (!Number.isFinite(assistantTurns) || assistantTurns <= 0) return 0
+  return Math.ceil((cumulativeCacheReadTokens / assistantTurns) * 1.2)
+}
+
 function getContextWindow(model: string): number {
   if (MODEL_CONTEXT_WINDOWS[model]) return MODEL_CONTEXT_WINDOWS[model]
   for (const [key, value] of Object.entries(MODEL_CONTEXT_WINDOWS)) {

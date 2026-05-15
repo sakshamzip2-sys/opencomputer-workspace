@@ -506,14 +506,92 @@ export function buildDisplayEntries(
     entries.push(entry)
   })
 
-  if (pendingAssistantToolMessages.length > 0) {
-    const previousEntry = entries[entries.length - 1]
-    if (previousEntry?.message.role === 'assistant') {
-      previousEntry.attachedToolMessages.push(...pendingAssistantToolMessages)
+  // Trailing tool-only assistant messages (no following text reply) are NOT
+  // glued onto the prior text entry — that would make a completed assistant
+  // turn appear to contain tools that actually belong to a still-in-progress
+  // turn. Callers that need to surface these "hidden" trailing tool calls
+  // should use getTrailingToolOnlyTurnSummary() to render a separate banner.
+
+  return entries
+}
+
+export type TrailingToolOnlyTurnSummary = {
+  /** How many trailing messages were skipped from the visible entry list. */
+  count: number
+  /** Distinct tool names invoked across the trailing tool-only span. */
+  toolNames: Array<string>
+  /** True when at least one completed assistant text reply precedes the span. */
+  hasFinalAssistantText: boolean
+}
+
+/**
+ * Detect "in-progress" tool-only turns trailing the last completed assistant
+ * text reply. buildDisplayEntries deliberately drops these so a finished
+ * assistant message isn't visually polluted with tool calls from the next
+ * (still-running) turn; this function gives the UI the data it needs to show
+ * a "3 hidden tool calls so far" hint instead.
+ *
+ * Returns null when the conversation already ends with an assistant text
+ * reply (nothing trailing to summarize) or when the list is empty.
+ */
+export function getTrailingToolOnlyTurnSummary(
+  messages: ReadonlyArray<ChatMessage>,
+): TrailingToolOnlyTurnSummary | null {
+  if (!Array.isArray(messages) || messages.length === 0) return null
+
+  const last = messages[messages.length - 1]
+  // If the thread already ends with a normal assistant text reply, there is
+  // no "trailing tool-only" tail to summarize.
+  if (last && last.role === 'assistant' && !isAssistantToolCallOnlyMessage(last)) {
+    return null
+  }
+
+  const trailingMessages: Array<ChatMessage> = []
+  let hasFinalAssistantText = false
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (!message) continue
+
+    if (isAssistantToolCallOnlyMessage(message)) {
+      trailingMessages.unshift(message)
+      continue
+    }
+
+    if (message.role === 'tool' || message.role === 'toolResult') {
+      trailingMessages.unshift(message)
+      continue
+    }
+
+    if (message.role === 'assistant') {
+      // Reached a completed assistant text reply — that's the boundary.
+      hasFinalAssistantText = true
+      break
+    }
+
+    // User / system / other roles end the trailing span too.
+    break
+  }
+
+  if (trailingMessages.length === 0) return null
+
+  const toolNames = new Set<string>()
+  for (const message of trailingMessages) {
+    if (message.role === 'assistant') {
+      for (const call of getToolCallsFromMessage(message)) {
+        const name = typeof call.name === 'string' ? call.name : ''
+        if (name) toolNames.add(name)
+      }
+    } else if (typeof message.toolName === 'string' && message.toolName) {
+      toolNames.add(message.toolName)
     }
   }
 
-  return entries
+  return {
+    count: trailingMessages.length,
+    toolNames: Array.from(toolNames),
+    hasFinalAssistantText,
+  }
 }
 
 function escapeAttributeSelector(value: string): string {
